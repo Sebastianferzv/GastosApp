@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0e0b00;
+  --surface: #1a1500;
+  --surface2: #221c00;
+  --border: rgba(201,154,20,.13);
+  --gold: #c99a14;
+  --gold2: #e8b83c;
+  --grad: linear-gradient(135deg, #c99a14, #e8b83c);
+  --text: #ffffff;
+  --text-muted: rgba(255,255,255,.42);
+  --paid: #34d399;
+  --red: #f87171;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Plus Jakarta Sans', sans-serif; min-height: 100vh; }
+
+input, select, textarea {
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 8px; padding: 8px 12px; font-size: 14px; width: 100%; outline: none;
+  font-family: inherit;
+}
+input:focus, select:focus { border-color: rgba(201,154,20,.5) !important; }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+.btn-primary {
+  background: var(--grad); border: none; color: #000;
+  font-weight: 700; padding: 10px 20px; border-radius: 10px;
+  cursor: pointer; font-size: 14px; transition: opacity .15s; font-family: inherit;
+}
+.btn-primary:hover { opacity: .85; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  color: var(--text-muted); padding: 7px 14px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; transition: all .15s; font-family: inherit;
+}
+.btn-secondary:hover { background: rgba(255,255,255,.1); color: var(--text); }
+
+.btn-danger {
+  background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.25);
+  color: var(--red); padding: 7px 14px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; font-family: inherit;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
 }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+}
+.modal-body { padding: 16px 20px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+@keyframes paidComplete {
+  0%   { opacity: 1; box-shadow: 0 4px 24px rgba(0,0,0,.4); transform: scale(1); }
+  25%  { opacity: 1; box-shadow: 0 0 0 2px rgba(52,211,153,.8), 0 0 32px rgba(52,211,153,.45); transform: scale(1.01); }
+  60%  { opacity: 1; box-shadow: 0 0 0 2px rgba(52,211,153,.8), 0 0 32px rgba(52,211,153,.45); transform: scale(1.01); }
+  100% { opacity: 0; box-shadow: 0 0 0 1px rgba(52,211,153,.2); transform: scale(0.97); }
+}
+.completing { animation: paidComplete 0.9s ease forwards; pointer-events: none; }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 10px; font-size: .88rem; font-weight: 500;
+  z-index: 2000; white-space: nowrap; pointer-events: none;
+  animation: toastIn .25s ease;
+}
+@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(10px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(201,154,20,.25); border-radius: 4px; }

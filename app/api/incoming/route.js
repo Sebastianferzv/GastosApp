@@ -1,0 +1,32 @@
+import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth';
+import sql from '@/lib/db';
+
+export async function GET() {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const charges = await sql`
+    SELECT
+      c.id, c.amount::float, c.paid, c.expense_id,
+      e.name as expense_name, e.date, e.month,
+      u.display_name as from_name, u.username as from_username
+    FROM charges c
+    JOIN expenses e ON e.id = c.expense_id
+    JOIN users u ON u.id = e.user_id
+    WHERE c.person_user_id = ${session.userId}
+    ORDER BY e.date DESC, e.created_at DESC
+  `;
+
+  return NextResponse.json(charges.map(c => ({
+    id: c.id,
+    expenseId: c.expense_id,
+    amount: c.amount,
+    paid: c.paid,
+    expenseName: c.expense_name,
+    date: c.date ? c.date.toISOString().slice(0, 10) : null,
+    month: c.month,
+    fromName: c.from_name,
+    fromUsername: c.from_username,
+  })));
+}
