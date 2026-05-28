@@ -1185,7 +1185,8 @@ export default function GastosPage() {
                 <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 {/* Total */}
                 <div style={{ flex: '0 0 100px' }}>
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto</label>
@@ -1302,8 +1303,9 @@ export default function GastosPage() {
                   <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </div>
 
-                {/* Add button */}
-                <button className="btn-primary" onClick={createExpense} style={{ alignSelf: 'flex-end', padding: '9px 18px' }}>
+              </div>
+                {/* Add button – always pinned to the right */}
+                <button className="btn-primary" onClick={createExpense} style={{ flexShrink: 0, padding: '9px 18px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
               </div>
@@ -1415,26 +1417,27 @@ export default function GastosPage() {
                     }} />
 
                     <div style={{ padding: '16px 16px 12px 20px' }}>
-                      {/* Top row */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
-                        <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff', lineHeight: 1 }}>
+                      {/* Top row: amount + title */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                        <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff', lineHeight: 1, flexShrink: 0 }}>
                           ${fmt(e.total)}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '1rem', fontWeight: 600 }}>{e.name}</div>
+                        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                          <div style={{ fontSize: '1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
                           <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{fmtDate(e.date)}</div>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(201,154,20,.15)', color: 'var(--gold2)' }}>
-                            <i className="bi bi-person-fill" /> Tu parte ${fmt(myShare)}
-                          </span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(248,113,113,.12)', color: '#fca5a5' }}>
-                            <i className="bi bi-clock" /> Pendiente ${fmt(pendiente)}
-                          </span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(52,211,153,.12)', color: 'var(--paid)' }}>
-                            <i className="bi bi-check-circle" /> Cobrado ${fmt(totalPaid)}
-                          </span>
-                        </div>
+                      </div>
+                      {/* Badges row */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(201,154,20,.15)', color: 'var(--gold2)' }}>
+                          <i className="bi bi-person-fill" /> Tu parte ${fmt(myShare)}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(248,113,113,.12)', color: '#fca5a5' }}>
+                          <i className="bi bi-clock" /> Pendiente ${fmt(pendiente)}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(52,211,153,.12)', color: 'var(--paid)' }}>
+                          <i className="bi bi-check-circle" /> Cobrado ${fmt(totalPaid)}
+                        </span>
                       </div>
 
                       {/* Charges row or edit panel */}

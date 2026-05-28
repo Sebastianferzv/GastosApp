@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <defs>
+    <radialGradient id="coinGrad" cx="38%" cy="32%" r="68%">
+      <stop offset="0%" stop-color="#f5d060"/>
+      <stop offset="55%" stop-color="#c99a14"/>
+      <stop offset="100%" stop-color="#7a5c00"/>
+    </radialGradient>
+    <radialGradient id="innerGrad" cx="38%" cy="32%" r="68%">
+      <stop offset="0%" stop-color="#e8b83c"/>
+      <stop offset="100%" stop-color="#9a6e00"/>
+    </radialGradient>
+  </defs>
+  <!-- Outer coin ring -->
+  <circle cx="256" cy="256" r="195" fill="url(#coinGrad)"/>
+  <!-- Inner coin face -->
+  <circle cx="256" cy="256" r="165" fill="url(#innerGrad)"/>
+  <!-- Edge detail ring -->
+  <circle cx="256" cy="256" r="165" fill="none" stroke="#f5d060" stroke-width="6" opacity="0.4"/>
+  <!-- Dollar sign -->
+  <text x="256" y="336" font-size="230" font-family="Georgia, serif" font-weight="bold" fill="#4a3500" text-anchor="middle" opacity="0.85">$</text>
+</svg>
