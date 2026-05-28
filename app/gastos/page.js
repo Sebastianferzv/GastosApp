@@ -1302,8 +1302,8 @@ export default function GastosPage() {
                   <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </div>
 
-                {/* Add button – margin-left auto empuja a la derecha de su fila */}
-                <button className="btn-primary" onClick={createExpense} style={{ marginLeft: 'auto', flexShrink: 0, padding: '9px 18px' }}>
+                {/* Add button */}
+                <button className="btn-primary" onClick={createExpense} style={{ alignSelf: 'flex-end', flexShrink: 0, padding: '9px 18px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
               </div>
