@@ -42,5 +42,12 @@ export async function POST(request) {
   const [f] = await sql`
     INSERT INTO friendships (requester_id, addressee_id) VALUES (${session.userId}, ${target.id}) RETURNING id
   `;
+
+  const [requester] = await sql`SELECT display_name FROM users WHERE id = ${session.userId}`;
+  await sql`
+    INSERT INTO notifications (user_id, type, message, from_user_id, reference_id)
+    VALUES (${target.id}, 'friend_request', ${`${requester.display_name} te envió una solicitud de amistad`}, ${session.userId}, ${f.id})
+  `;
+
   return NextResponse.json({ success: true, friendshipId: f.id, displayName: target.display_name });
 }

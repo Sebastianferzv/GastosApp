@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   display_name VARCHAR(100) NOT NULL,
+  avatar_url TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -43,3 +44,18 @@ CREATE TABLE IF NOT EXISTS charges (
   paid BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  from_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reference_id INTEGER,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Run these ALTER statements if the tables already exist:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- (notifications table is new, no alter needed)

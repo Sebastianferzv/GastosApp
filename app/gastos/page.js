@@ -2,6 +2,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
+// ── Avatar helper ──────────────────────────────────────────────────────────────
+function UserAvatar({ user, size = 32 }) {
+  if (user?.avatarUrl) {
+    return <img src={user.avatarUrl} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(201,154,20,.5)', flexShrink: 0 }} />;
+  }
+  const initials = (user?.displayName || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg,#c99a14,#e8b83c)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.35, fontWeight: 700, color: '#0e0b00', border: '2px solid rgba(201,154,20,.5)', flexShrink: 0, userSelect: 'none' }}>
+      {initials}
+    </div>
+  );
+}
+
+function relativeTime(ts) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'ahora';
+  if (m < 60) return `hace ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h}h`;
+  return `hace ${Math.floor(h / 24)}d`;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio',
   'Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -110,6 +133,22 @@ export default function GastosPage() {
   const [toastState, setToastState] = useState(null);
   const toastTimer = useRef(null);
 
+  // User menu & profile
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileTab, setProfileTab] = useState('avatar');
+  const [profileDisplayName, setProfileDisplayName] = useState('');
+  const [profileCurrentPwd, setProfileCurrentPwd] = useState('');
+  const [profileNewPwd, setProfileNewPwd] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const userMenuRef = useRef(null);
+  const avatarInputRef = useRef(null);
+
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifMenuRef = useRef(null);
+
   function showToast(msg, type = 'info') {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToastState({ msg, type });
@@ -142,6 +181,11 @@ export default function GastosPage() {
     if (res.ok) setIncoming(await res.json());
   }, []);
 
+  const fetchNotifications = useCallback(async () => {
+    const res = await fetch('/api/notifications');
+    if (res.ok) setNotifications(await res.json());
+  }, []);
+
   // ── Init ─────────────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
@@ -153,7 +197,7 @@ export default function GastosPage() {
       setContacts(loadContacts());
 
       const [, mData] = await Promise.all([fetchExpenses(), fetchMonths()]);
-      await Promise.all([fetchFriends(), fetchIncoming()]);
+      await Promise.all([fetchFriends(), fetchIncoming(), fetchNotifications()]);
 
       if (mData && mData.length > 0) {
         const today = todayISO().slice(0, 7);
@@ -169,21 +213,97 @@ export default function GastosPage() {
     }
   }, [months, selectedMonth]);
 
-  // Close people panel on outside click
+  // Close people panel and dropdowns on outside click
   useEffect(() => {
     function handleMouseDown(e) {
-      if (peopleWrapRef.current && !peopleWrapRef.current.contains(e.target)) {
-        setPanelOpen(false);
-      }
+      if (peopleWrapRef.current && !peopleWrapRef.current.contains(e.target)) setPanelOpen(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false);
+      if (notifMenuRef.current && !notifMenuRef.current.contains(e.target)) setShowNotifications(false);
     }
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
+  // Poll notifications every 30s
+  useEffect(() => {
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
   // ── Logout ───────────────────────────────────────────────────────────────────
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  }
+
+  // ── Profile actions ──────────────────────────────────────────────────────────
+  async function updateDisplayName() {
+    const name = profileDisplayName.trim();
+    if (!name) return;
+    const res = await fetch('/api/auth/profile', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setProfileError(data.error); return; }
+    setUser(prev => ({ ...prev, displayName: data.user.displayName }));
+    setProfileError('');
+    showToast('Nombre actualizado.', 'success');
+  }
+
+  async function updatePassword() {
+    const res = await fetch('/api/auth/profile', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: profileCurrentPwd, newPassword: profileNewPwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setProfileError(data.error); return; }
+    setProfileCurrentPwd(''); setProfileNewPwd(''); setProfileError('');
+    showToast('Contraseña actualizada.', 'success');
+  }
+
+  function handleAvatarChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 200;
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        uploadAvatar(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
+
+  async function uploadAvatar(dataUrl) {
+    const res = await fetch('/api/auth/profile', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avatarUrl: dataUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast('Error al subir la foto.', 'danger'); return; }
+    setUser(prev => ({ ...prev, avatarUrl: data.user.avatarUrl }));
+    showToast('Foto actualizada.', 'success');
+  }
+
+  // ── Notifications ────────────────────────────────────────────────────────────
+  async function markNotificationsRead(ids) {
+    await fetch('/api/notifications/read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    setNotifications(prev => prev.map(n =>
+      (!ids || ids.includes(n.id)) ? { ...n, read: true } : n
+    ));
   }
 
   // ── Month management ─────────────────────────────────────────────────────────
@@ -923,6 +1043,8 @@ export default function GastosPage() {
     );
   }
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+
   const btnStyle = {
     contacts: {
       border: '1px solid rgba(201,154,20,.4)', color: 'var(--gold2)',
@@ -947,10 +1069,83 @@ export default function GastosPage() {
             <button style={btnStyle.contacts} onClick={() => { setShowFriends(true); fetchFriends(); }}>
               <i className="bi bi-people" style={{ marginRight: 4 }} />Amigos
             </button>
-            <span style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>{user.displayName}</span>
-            <button className="btn-secondary" onClick={handleLogout} style={{ padding: '5px 12px', fontSize: '.8rem' }}>
-              <i className="bi bi-box-arrow-right" />
-            </button>
+
+            {/* ── Notification bell ── */}
+            <div ref={notifMenuRef} style={{ position: 'relative' }}>
+              <button onClick={() => { setShowNotifications(v => !v); setShowUserMenu(false); }}
+                style={{ background: 'none', border: '1px solid rgba(201,154,20,.3)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', color: unreadCount > 0 ? 'var(--gold2)' : 'var(--text-muted)', position: 'relative', fontFamily: 'inherit' }}>
+                <i className="bi bi-bell" />
+                {unreadCount > 0 && (
+                  <span style={{ position: 'absolute', top: -5, right: -5, background: '#ef4444', color: '#fff', borderRadius: '50%', minWidth: 17, height: 17, fontSize: '.62rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, padding: '0 3px' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifications && (
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 300, background: '#1a1600', border: '1px solid rgba(201,154,20,.2)', borderRadius: 12, zIndex: 200, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: '.9rem' }}>Notificaciones</span>
+                    {unreadCount > 0 && (
+                      <button onClick={() => markNotificationsRead(null)} style={{ background: 'none', border: 'none', color: 'var(--gold)', fontSize: '.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Marcar todo leído
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+                    {notifications.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin notificaciones</div>
+                    ) : notifications.map(n => (
+                      <div key={n.id} onClick={() => !n.read && markNotificationsRead([n.id])}
+                        style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: n.read ? 'default' : 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : 'bi-cash-coin'}`} style={{ color: 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '.85rem', color: n.read ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.4 }}>{n.message}</div>
+                          <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 3 }}>{relativeTime(n.createdAt)}</div>
+                        </div>
+                        {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', flexShrink: 0, marginTop: 5 }} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── User avatar + dropdown menu ── */}
+            <div ref={userMenuRef} style={{ position: 'relative' }}>
+              <button onClick={() => { setShowUserMenu(v => !v); setShowNotifications(false); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', borderRadius: '50%' }}>
+                <UserAvatar user={user} size={34} />
+              </button>
+              {showUserMenu && (
+                <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 220, background: '#1a1600', border: '1px solid rgba(201,154,20,.2)', borderRadius: 12, zIndex: 200, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,.7)' }}>
+                  <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(201,154,20,.1)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <UserAvatar user={user} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: '.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.displayName}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>@{user.username}</div>
+                    </div>
+                  </div>
+                  {[
+                    { icon: 'bi-image', label: 'Cambiar foto', action: () => { setProfileTab('avatar'); setShowProfile(true); setShowUserMenu(false); } },
+                    { icon: 'bi-pencil', label: 'Cambiar nombre', action: () => { setProfileTab('name'); setProfileDisplayName(user.displayName); setProfileError(''); setShowProfile(true); setShowUserMenu(false); } },
+                    { icon: 'bi-lock', label: 'Cambiar contraseña', action: () => { setProfileTab('password'); setProfileCurrentPwd(''); setProfileNewPwd(''); setProfileError(''); setShowProfile(true); setShowUserMenu(false); } },
+                  ].map(item => (
+                    <button key={item.label} onClick={item.action}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: '.87rem', fontFamily: 'inherit', textAlign: 'left' }}>
+                      <i className={`bi ${item.icon}`} style={{ color: 'var(--gold)', width: 16, textAlign: 'center' }} />
+                      {item.label}
+                    </button>
+                  ))}
+                  <div style={{ borderTop: '1px solid rgba(201,154,20,.1)' }}>
+                    <button onClick={handleLogout}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer', color: '#f87171', fontSize: '.87rem', fontFamily: 'inherit' }}>
+                      <i className="bi bi-box-arrow-right" style={{ width: 16, textAlign: 'center' }} />
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1714,6 +1909,83 @@ export default function GastosPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowAddPerson(false)}>Cancelar</button>
               <button className="btn-primary" onClick={saveNewPerson}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Profile ══ */}
+      {showProfile && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowProfile(false)}>
+          <div className="modal-box" style={{ maxWidth: 380 }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-person-circle" style={{ marginRight: 8 }} />Mi perfil</span>
+              <button onClick={() => setShowProfile(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+                {[{ key: 'avatar', label: 'Foto' }, { key: 'name', label: 'Nombre' }, { key: 'password', label: 'Contraseña' }].map(t => (
+                  <button key={t.key} onClick={() => { setProfileTab(t.key); setProfileError(''); }}
+                    style={{ flex: 1, background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0', fontSize: '.85rem', fontWeight: 600, fontFamily: 'inherit', color: profileTab === t.key ? 'var(--gold2)' : 'var(--text-muted)', borderBottom: profileTab === t.key ? '2px solid var(--gold2)' : '2px solid transparent', marginBottom: -1 }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {profileTab === 'avatar' && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+                    <UserAvatar user={user} size={80} />
+                  </div>
+                  <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
+                  <button className="btn-primary" onClick={() => avatarInputRef.current?.click()}>
+                    <i className="bi bi-upload" style={{ marginRight: 6 }} />Subir foto
+                  </button>
+                  {user.avatarUrl && (
+                    <button className="btn-secondary" style={{ marginLeft: 8 }}
+                      onClick={async () => {
+                        const res = await fetch('/api/auth/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ avatarUrl: null }) });
+                        if (res.ok) { setUser(prev => ({ ...prev, avatarUrl: null })); showToast('Foto eliminada.', 'info'); }
+                      }}>
+                      Eliminar foto
+                    </button>
+                  )}
+                  <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', marginTop: 14 }}>La imagen se comprime automáticamente a 200×200px.</p>
+                </div>
+              )}
+
+              {profileTab === 'name' && (
+                <div>
+                  <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Nombre para mostrar</label>
+                  <input type="text" value={profileDisplayName}
+                    onChange={e => { setProfileDisplayName(e.target.value); setProfileError(''); }}
+                    onKeyDown={e => e.key === 'Enter' && updateDisplayName()} />
+                  {profileError && <p style={{ color: 'var(--red)', fontSize: '.82rem', marginTop: 6 }}>{profileError}</p>}
+                </div>
+              )}
+
+              {profileTab === 'password' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Contraseña actual</label>
+                    <input type="password" value={profileCurrentPwd} onChange={e => { setProfileCurrentPwd(e.target.value); setProfileError(''); }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Nueva contraseña</label>
+                    <input type="password" value={profileNewPwd} onChange={e => { setProfileNewPwd(e.target.value); setProfileError(''); }} />
+                  </div>
+                  {profileError && <p style={{ color: 'var(--red)', fontSize: '.82rem' }}>{profileError}</p>}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowProfile(false)}>Cerrar</button>
+              {profileTab === 'name' && (
+                <button className="btn-primary" onClick={updateDisplayName}>Guardar</button>
+              )}
+              {profileTab === 'password' && (
+                <button className="btn-primary" onClick={updatePassword}>Cambiar</button>
+              )}
             </div>
           </div>
         </div>
