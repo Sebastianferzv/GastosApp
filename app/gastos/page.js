@@ -1303,7 +1303,7 @@ export default function GastosPage() {
                 </div>
 
                 {/* Botón agregar */}
-                <button className="btn-primary ef-boton" onClick={createExpense} style={{ padding: '9px 18px' }}>
+                <button className="btn-primary ef-boton" onClick={createExpense} style={{ padding: '9px 36px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
               </div>
