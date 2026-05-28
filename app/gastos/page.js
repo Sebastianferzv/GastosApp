@@ -1185,8 +1185,7 @@ export default function GastosPage() {
                 <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
               </div>
 
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 {/* Total */}
                 <div style={{ flex: '0 0 100px' }}>
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto</label>
@@ -1303,9 +1302,8 @@ export default function GastosPage() {
                   <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </div>
 
-              </div>
-                {/* Add button – always pinned to the right */}
-                <button className="btn-primary" onClick={createExpense} style={{ flexShrink: 0, padding: '9px 18px' }}>
+                {/* Add button – margin-left auto empuja a la derecha de su fila */}
+                <button className="btn-primary" onClick={createExpense} style={{ marginLeft: 'auto', flexShrink: 0, padding: '9px 18px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
               </div>
