@@ -1185,9 +1185,9 @@ export default function GastosPage() {
                 <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                {/* Total */}
-                <div style={{ flex: '0 0 100px' }}>
+              <div className="expense-form">
+                {/* Monto */}
+                <div className="ef-monto">
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto</label>
                   <div style={{ display: 'flex' }}>
                     <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
@@ -1197,16 +1197,16 @@ export default function GastosPage() {
                   </div>
                 </div>
 
-                {/* Name */}
-                <div style={{ flex: '1 1 140px' }}>
+                {/* Nombre */}
+                <div className="ef-nombre">
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
                   <input type="text" placeholder="Cena, arriendo..." value={formName}
                     onChange={e => setFormName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && createExpense()} />
                 </div>
 
-                {/* People picker */}
-                <div style={{ flex: '1 1 160px', position: 'relative' }} ref={peopleWrapRef}>
+                {/* Personas */}
+                <div className="ef-people" style={{ position: 'relative' }} ref={peopleWrapRef}>
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Personas</label>
                   <div onClick={() => setPanelOpen(p => !p)}
                     style={{
@@ -1296,14 +1296,14 @@ export default function GastosPage() {
                   )}
                 </div>
 
-                {/* Date */}
-                <div style={{ flex: '0 0 130px' }}>
+                {/* Fecha */}
+                <div className="ef-fecha">
                   <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
                   <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </div>
 
-                {/* Add button */}
-                <button className="btn-primary" onClick={createExpense} style={{ alignSelf: 'flex-end', flexShrink: 0, padding: '9px 18px' }}>
+                {/* Botón agregar */}
+                <button className="btn-primary ef-boton" onClick={createExpense} style={{ padding: '9px 18px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
               </div>

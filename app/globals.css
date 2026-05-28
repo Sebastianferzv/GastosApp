@@ -87,4 +87,29 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* Expense form grid */
+.expense-form {
+  display: grid;
+  grid-template-areas:
+    "monto  nombre"
+    "people people"
+    "fecha  boton";
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  align-items: end;
+}
+.expense-form .ef-monto   { grid-area: monto; }
+.expense-form .ef-nombre  { grid-area: nombre; }
+.expense-form .ef-people  { grid-area: people; }
+.expense-form .ef-fecha   { grid-area: fecha; }
+.expense-form .ef-boton   { grid-area: boton; width: 100%; height: 100%; }
+
+@media (min-width: 620px) {
+  .expense-form {
+    grid-template-areas: "monto nombre people fecha boton";
+    grid-template-columns: 110px 1fr 1fr 130px auto;
+  }
+  .expense-form .ef-boton { width: auto; height: auto; }
+}
 ::-webkit-scrollbar-thumb { background: rgba(201,154,20,.25); border-radius: 4px; }
