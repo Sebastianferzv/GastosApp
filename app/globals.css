@@ -92,10 +92,10 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .expense-form {
   display: grid;
   grid-template-areas:
-    "monto  nombre"
-    "people people"
-    "fecha  boton";
-  grid-template-columns: 110px 1fr;
+    "monto  nombre nombre"
+    "people people people"
+    "fecha  fecha  boton";
+  grid-template-columns: 110px 1fr auto;
   gap: 8px;
   align-items: end;
 }
@@ -103,13 +103,12 @@ input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .expense-form .ef-nombre  { grid-area: nombre; }
 .expense-form .ef-people  { grid-area: people; }
 .expense-form .ef-fecha   { grid-area: fecha; }
-.expense-form .ef-boton   { grid-area: boton; width: 100%; height: 100%; }
+.expense-form .ef-boton   { grid-area: boton; }
 
 @media (min-width: 620px) {
   .expense-form {
     grid-template-areas: "monto nombre people fecha boton";
     grid-template-columns: 110px 1fr 1fr 130px auto;
   }
-  .expense-form .ef-boton { width: auto; height: auto; }
 }
 ::-webkit-scrollbar-thumb { background: rgba(201,154,20,.25); border-radius: 4px; }
