@@ -151,6 +151,12 @@ export default function GastosPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const notifMenuRef = useRef(null);
 
+  // iOS detection
+  const [isIOS, setIsIOS] = useState(false);
+  useEffect(() => {
+    setIsIOS(/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream);
+  }, []);
+
   function showToast(msg, type = 'info') {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToastState({ msg, type });
@@ -1203,7 +1209,7 @@ export default function GastosPage() {
 
       {/* ── Main tabs ── */}
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 12px' }}>
-        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', marginBottom: 20, marginTop: 16 }}>
           {[
             { key: 'gastos', label: 'Mis gastos' },
             { key: 'cobran', label: 'Me cobran' },
@@ -1224,6 +1230,13 @@ export default function GastosPage() {
               )}
             </button>
           ))}
+          {isIOS && (
+            <button onClick={async () => { await Promise.all([fetchExpenses(), fetchIncoming(), fetchFriends(), fetchNotifications()]); showToast('Actualizado.', 'success'); }}
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '6px 4px', marginBottom: -1, fontSize: '1.05rem' }}
+              title="Actualizar">
+              <i className="bi bi-arrow-clockwise" />
+            </button>
+          )}
         </div>
 
         {/* ══ TAB: Mis gastos ══ */}
