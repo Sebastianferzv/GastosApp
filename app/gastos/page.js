@@ -847,14 +847,14 @@ export default function GastosPage() {
     const net = totalOwesYou - totalYouOwe;
     const lines = [];
     if (entry.owesYou.length > 0) {
-      lines.push('Te debe:');
+      lines.push('Me debes:');
       entry.owesYou.forEach(r => lines.push(`  +$${fmt(r.amount)} ${r.expenseName}`));
     }
     if (entry.youOwe.length > 0) {
-      lines.push('Les debes:');
+      lines.push('Debo:');
       entry.youOwe.forEach(r => lines.push(`  -$${fmt(r.amount)} ${r.expenseName}`));
     }
-    lines.push(`\nTotal: ${net >= 0 ? '+' : '-'}$${fmt(Math.abs(net))} (${net >= 0 ? 'te deben' : 'les debes'})`);
+    lines.push(`\nTotal: ${net >= 0 ? '+' : '-'}$${fmt(Math.abs(net))} (${net >= 0 ? 'me debes' : 'debo'})`);
     navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copiado al portapapeles.', 'success'));
   }
 
