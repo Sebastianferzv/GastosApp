@@ -308,6 +308,22 @@ export default function GastosPage() {
     ));
   }
 
+  async function handleNotifAction(notifId, action) {
+    const res = await fetch(`/api/notifications/${notifId}/action`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (res.ok) {
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
+      if (action === 'reject') {
+        await fetchExpenses();
+        showToast('Cobro revertido a pendiente.', 'info');
+      } else {
+        showToast('Pago aceptado.', 'success');
+      }
+    }
+  }
+
   // ── Month management ─────────────────────────────────────────────────────────
   async function handleAddMonth() {
     if (!addMonthVal) return;
@@ -1109,17 +1125,33 @@ export default function GastosPage() {
                   <div style={{ maxHeight: 360, overflowY: 'auto' }}>
                     {notifications.length === 0 ? (
                       <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin notificaciones</div>
-                    ) : notifications.map(n => (
-                      <div key={n.id} onClick={() => !n.read && markNotificationsRead([n.id])}
-                        style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: n.read ? 'default' : 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                        <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : 'bi-cash-coin'}`} style={{ color: 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '.85rem', color: n.read ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.4 }}>{n.message}</div>
-                          <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 3 }}>{relativeTime(n.createdAt)}</div>
+                    ) : notifications.map(n => {
+                      const isPaidAction = n.type === 'charge_paid' && !n.read;
+                      return (
+                        <div key={n.id}
+                          onClick={() => !n.read && !isPaidAction && markNotificationsRead([n.id])}
+                          style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: (!n.read && !isPaidAction) ? 'pointer' : 'default', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                          <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : 'bi-cash-coin'}`} style={{ color: 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '.85rem', color: n.read ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.4 }}>{n.message}</div>
+                            <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 3 }}>{relativeTime(n.createdAt)}</div>
+                            {isPaidAction && (
+                              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                                <button onClick={e => { e.stopPropagation(); handleNotifAction(n.id, 'accept'); }}
+                                  style={{ flex: 1, background: 'rgba(52,211,153,.15)', border: '1px solid rgba(52,211,153,.35)', color: 'var(--paid)', padding: '5px 0', borderRadius: 7, cursor: 'pointer', fontSize: '.78rem', fontWeight: 600, fontFamily: 'inherit' }}>
+                                  <i className="bi bi-check-lg" style={{ marginRight: 4 }} />Aceptar
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); handleNotifAction(n.id, 'reject'); }}
+                                  style={{ flex: 1, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.3)', color: 'var(--red)', padding: '5px 0', borderRadius: 7, cursor: 'pointer', fontSize: '.78rem', fontWeight: 600, fontFamily: 'inherit' }}>
+                                  <i className="bi bi-x-lg" style={{ marginRight: 4 }} />Rechazar
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {!n.read && !isPaidAction && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', flexShrink: 0, marginTop: 5 }} />}
                         </div>
-                        {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', flexShrink: 0, marginTop: 5 }} />}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

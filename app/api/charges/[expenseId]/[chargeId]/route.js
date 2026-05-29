@@ -24,7 +24,7 @@ export async function PUT(request, { params }) {
       const [payer] = await sql`SELECT display_name FROM users WHERE id = ${session.userId}`;
       await sql`
         INSERT INTO notifications (user_id, type, message, from_user_id, reference_id)
-        VALUES (${expense.user_id}, 'charge_paid', ${`${payer.display_name} registró su pago en "${expense.name}"`}, ${session.userId}, ${parseInt(expenseId)})
+        VALUES (${expense.user_id}, 'charge_paid', ${`${payer.display_name} registró su pago en "${expense.name}"`}, ${session.userId}, ${parseInt(chargeId)})
       `;
     }
   }
