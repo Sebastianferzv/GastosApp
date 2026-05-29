@@ -798,7 +798,10 @@ export default function GastosPage() {
         .youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
     });
     return Object.values(byKey)
-      .filter(e => e.owesYou.length > 0 || e.youOwe.length > 0)
+      .filter(e => {
+        const net = e.owesYou.reduce((s, r) => s + r.amount, 0) - e.youOwe.reduce((s, r) => s + r.amount, 0);
+        return net !== 0;
+      })
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
@@ -838,11 +841,21 @@ export default function GastosPage() {
     }, 900);
   }
 
-  function copyResumen(name, rows) {
-    const total = rows.reduce((s, r) => s + r.amount, 0);
-    const lines = rows.map(r => `${fmt(r.amount)} ${r.expenseName}`).join('\n');
-    const text = `Detalle cobro:\n${lines}\nTotal: ${fmt(total)}`;
-    navigator.clipboard.writeText(text).then(() => showToast('Copiado al portapapeles.', 'success'));
+  function copyResumen(entry) {
+    const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
+    const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+    const net = totalOwesYou - totalYouOwe;
+    const lines = [];
+    if (entry.owesYou.length > 0) {
+      lines.push('Te debe:');
+      entry.owesYou.forEach(r => lines.push(`  +$${fmt(r.amount)} ${r.expenseName}`));
+    }
+    if (entry.youOwe.length > 0) {
+      lines.push('Les debes:');
+      entry.youOwe.forEach(r => lines.push(`  -$${fmt(r.amount)} ${r.expenseName}`));
+    }
+    lines.push(`\nTotal: ${net >= 0 ? '+' : '-'}$${fmt(Math.abs(net))} (${net >= 0 ? 'te deben' : 'les debes'})`);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copiado al portapapeles.', 'success'));
   }
 
   // ── Friends management ───────────────────────────────────────────────────────
@@ -1794,12 +1807,9 @@ export default function GastosPage() {
                     className={isCompletingCard ? 'completing' : ''}
                     style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '1rem 1.1rem', marginBottom: 12, position: 'relative' }}>
                     {/* Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
                       <span style={{ fontSize: '1rem', fontWeight: 700 }}>
                         <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />{entry.name}
-                      </span>
-                      <span style={{ fontSize: '1rem', fontWeight: 700, color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>
-                        {net >= 0 ? `+$${fmt(net)}` : `-$${fmt(Math.abs(net))}`}
                       </span>
                     </div>
 
@@ -1848,14 +1858,24 @@ export default function GastosPage() {
                       </div>
                     )}
 
+                    {/* Net total row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '2px solid rgba(255,255,255,.1)' }}>
+                      <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                        {net >= 0 ? 'Te deben' : 'Les debes'}
+                      </span>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 800, color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>
+                        {net >= 0 ? '+' : '-'}${fmt(Math.abs(net))}
+                      </span>
+                    </div>
+
                     {/* Footer buttons */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.07)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,.07)' }}>
                       <button onClick={() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); }}
-                        title="Marcar todo pagado"
+                        title="Liquidar todo"
                         style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
                         <i className="bi bi-check-all" />
                       </button>
-                      <button onClick={() => copyResumen(entry.name, allRows)}
+                      <button onClick={() => copyResumen(entry)}
                         title="Copiar"
                         style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px', borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit' }}>
                         <i className="bi bi-clipboard" />
@@ -1880,14 +1900,19 @@ export default function GastosPage() {
             <div style={{ background: '#1a1500', border: '1px solid rgba(201,154,20,.15)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 320, width: '88%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
               <i className="bi bi-check-all" style={{ fontSize: '2rem', color: '#34d399', display: 'block', marginBottom: 12 }} />
               <p style={{ margin: '0 0 .4rem', fontWeight: 600 }}>¿Liquidar todo con {entry.name}?</p>
-              {entry.youOwe.length > 0 && net < 0 ? (
-                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Les debes <strong style={{ color: '#fca5a5' }}>${fmt(totalYouOwe)}</strong>.<br />
+              {net < 0 ? (
+                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>Te deben ${fmt(totalOwesYou)}</span> — </>}
+                  <span style={{ color: '#fca5a5' }}>les debes ${fmt(totalYouOwe)}</span><br />
+                  Neto: <strong style={{ color: '#fca5a5' }}>les debes ${fmt(Math.abs(net))}</strong>.<br />
                   Se enviará solicitud de confirmación.
                 </p>
               ) : (
-                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                  Todo se marcará como pagado directamente.
+                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {totalYouOwe > 0 && <><span style={{ color: '#fca5a5' }}>Les debes ${fmt(totalYouOwe)}</span> — </>}
+                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>te deben ${fmt(totalOwesYou)}</span><br /></>}
+                  Neto: <strong style={{ color: 'var(--gold2)' }}>te deben ${fmt(net)}</strong>.<br />
+                  Todo se marcará pagado directamente.
                 </p>
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
