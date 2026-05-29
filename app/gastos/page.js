@@ -315,11 +315,11 @@ export default function GastosPage() {
     });
     if (res.ok) {
       setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
-      if (action === 'reject') {
+      if (action === 'accept') {
         await fetchExpenses();
-        showToast('Cobro revertido a pendiente.', 'info');
+        showToast('Pago confirmado.', 'success');
       } else {
-        showToast('Pago aceptado.', 'success');
+        showToast('Solicitud rechazada.', 'info');
       }
     }
   }
@@ -456,15 +456,19 @@ export default function GastosPage() {
     await fetchExpenses();
   }
 
-  // ── Toggle incoming charge ───────────────────────────────────────────────────
+  // ── Request payment confirmation (does NOT mark paid yet) ───────────────────
+  const [pendingRequests, setPendingRequests] = useState(new Set());
+
   async function toggleIncomingPaid(expenseId, chargeId) {
-    const res = await fetch(`/api/charges/${expenseId}/${chargeId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paid: true }),
-    });
-    if (res.ok) { await fetchIncoming(); showToast('Marcado como pagado.', 'success'); }
-    else showToast('Error al actualizar.', 'danger');
+    setPendingRequests(prev => new Set(prev).add(chargeId));
+    const res = await fetch(`/api/charges/${expenseId}/${chargeId}/request`, { method: 'POST' });
+    if (res.ok) {
+      showToast('Solicitud enviada. Esperando confirmación.', 'info');
+    } else {
+      setPendingRequests(prev => { const s = new Set(prev); s.delete(chargeId); return s; });
+      const data = await res.json();
+      showToast(data.error || 'Error al enviar solicitud.', 'danger');
+    }
   }
 
   async function revertIncomingPaid() {
@@ -1652,6 +1656,10 @@ export default function GastosPage() {
                             <i className="bi bi-check-circle-fill" /> Pagado
                           </span>
                         )
+                      ) : pendingRequests.has(item.id) ? (
+                        <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                          <i className="bi bi-hourglass-split" /> Esperando...
+                        </span>
                       ) : (
                         <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
                           style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>

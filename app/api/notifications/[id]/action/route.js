@@ -16,15 +16,18 @@ export async function POST(request, { params }) {
   `;
   if (!notif) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-  if (action === 'reject' && notif.type === 'charge_paid' && notif.reference_id) {
+  if (notif.type === 'charge_paid' && notif.reference_id) {
     const chargeId = notif.reference_id;
     const [charge] = await sql`
-      SELECT c.id, c.expense_id FROM charges c
+      SELECT c.id FROM charges c
       JOIN expenses e ON e.id = c.expense_id
       WHERE c.id = ${chargeId} AND e.user_id = ${session.userId}
     `;
     if (charge) {
-      await sql`UPDATE charges SET paid = FALSE WHERE id = ${chargeId}`;
+      if (action === 'accept') {
+        await sql`UPDATE charges SET paid = TRUE WHERE id = ${chargeId}`;
+      }
+      // reject: charge stays unpaid, nothing to do
     }
   }
 
