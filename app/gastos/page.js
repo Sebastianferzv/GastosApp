@@ -122,6 +122,7 @@ export default function GastosPage() {
   const [addPersonVal, setAddPersonVal] = useState('');
   const [showMarkAllConfirm, setShowMarkAllConfirm] = useState(false);
   const [markAllTarget, setMarkAllTarget] = useState(null); // {name, idx}
+  const [showAbout, setShowAbout] = useState(false);
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
@@ -1098,11 +1099,11 @@ export default function GastosPage() {
     <div style={{ minHeight: '100vh' }}>
       {/* ── Navbar ── */}
       <div style={{ background: '#080600', borderBottom: '1px solid rgba(201,154,20,.15)', paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))', paddingBottom: '14px', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 700, fontSize: '1.1rem', background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-            <i className="bi bi-cash-stack" style={{ marginRight: 8 }} />
-            Gastos y Cobros
-          </span>
+        <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {/* Logo button */}
+          <button onClick={() => setShowAbout(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', fontSize: '1.3rem', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
+            <i className="bi bi-cash-stack" style={{ background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} />
+          </button>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button style={btnStyle.contacts} onClick={() => setShowResumen(true)}>
               <i className="bi bi-bar-chart-line" style={{ marginRight: 4 }} />Resumen
@@ -1987,6 +1988,26 @@ export default function GastosPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowAddPerson(false)}>Cancelar</button>
               <button className="btn-primary" onClick={saveNewPerson}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: About ══ */}
+      {showAbout && (
+        <div className="overlay" onClick={() => setShowAbout(false)}>
+          <div className="modal-box" style={{ maxWidth: 280, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '32px 24px 28px' }}>
+              <div style={{ fontSize: '2.8rem', marginBottom: 16 }}>
+                <i className="bi bi-cash-stack" style={{ background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} />
+              </div>
+              <div style={{ fontWeight: 700, fontSize: '1.3rem', background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', marginBottom: 8 }}>
+                Gastos y Cobros
+              </div>
+              <div style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>by sebaf</div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)', padding: '12px' }}>
+              <button onClick={() => setShowAbout(false)} className="btn-secondary" style={{ width: '100%' }}>Cerrar</button>
             </div>
           </div>
         </div>
