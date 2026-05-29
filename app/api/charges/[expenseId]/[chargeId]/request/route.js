@@ -2,6 +2,23 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import sql from '@/lib/db';
 
+export async function DELETE(request, { params }) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  const { chargeId } = await params;
+
+  await sql`
+    DELETE FROM notifications
+    WHERE type = 'charge_paid'
+      AND reference_id = ${parseInt(chargeId)}
+      AND from_user_id = ${session.userId}
+      AND read = FALSE
+  `;
+
+  return NextResponse.json({ success: true });
+}
+
 export async function POST(request, { params }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });

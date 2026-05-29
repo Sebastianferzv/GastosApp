@@ -478,6 +478,14 @@ export default function GastosPage() {
     }
   }
 
+  async function cancelPaymentRequest(expenseId, chargeId) {
+    const res = await fetch(`/api/charges/${expenseId}/${chargeId}/request`, { method: 'DELETE' });
+    if (res.ok) {
+      setPendingRequests(prev => { const s = new Set(prev); s.delete(chargeId); return s; });
+      showToast('Solicitud cancelada.', 'info');
+    }
+  }
+
   async function revertIncomingPaid() {
     if (!revertTarget) return;
     const res = await fetch(`/api/charges/${revertTarget.expenseId}/${revertTarget.id}`, {
@@ -1671,9 +1679,15 @@ export default function GastosPage() {
                           </span>
                         )
                       ) : pendingRequests.has(item.id) ? (
-                        <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                          <i className="bi bi-hourglass-split" /> Esperando...
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                            <i className="bi bi-hourglass-split" /> Esperando...
+                          </span>
+                          <button onClick={() => cancelPaymentRequest(item.expenseId, item.id)}
+                            style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.25)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                            Cancelar
+                          </button>
+                        </div>
                       ) : (
                         <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
                           style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
