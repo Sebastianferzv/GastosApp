@@ -778,35 +778,63 @@ export default function GastosPage() {
 
   // ── Resumen ──────────────────────────────────────────────────────────────────
   function buildResumenData() {
-    const byPerson = {};
+    const byKey = {};
+    const getOrCreate = (key, name, userId) => {
+      if (!byKey[key]) byKey[key] = { name, userId, owesYou: [], youOwe: [] };
+      return byKey[key];
+    };
     expenses.forEach(e => {
       e.charges.forEach(c => {
         if (c.paid) return;
-        if (!byPerson[c.person]) byPerson[c.person] = [];
-        byPerson[c.person].push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
+        const key = c.personUserId ? `u${c.personUserId}` : `n${c.person}`;
+        getOrCreate(key, c.person, c.personUserId || null)
+          .owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
       });
     });
-    return Object.keys(byPerson).sort().map(name => ({ name, rows: byPerson[name] }));
+    incoming.forEach(item => {
+      if (item.paid) return;
+      const key = item.fromUserId ? `u${item.fromUserId}` : `n${item.fromName}`;
+      getOrCreate(key, item.fromName, item.fromUserId || null)
+        .youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
+    });
+    return Object.values(byKey)
+      .filter(e => e.owesYou.length > 0 || e.youOwe.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
-  async function handleMarkAllPaid(name) {
-    const toMark = [];
-    expenses.forEach(e => {
-      e.charges.forEach(c => {
-        if (c.person === name && !c.paid) toMark.push({ expenseId: e.id, chargeId: c.id });
-      });
-    });
-    setCompletingResumen(prev => new Set([...prev, name]));
+  async function handleMarkAllPaid(entry) {
+    const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
+    const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+    const net = totalOwesYou - totalYouOwe;
+
+    setCompletingResumen(prev => new Set([...prev, entry.name]));
     setTimeout(async () => {
-      await Promise.all(toMark.map(({ expenseId, chargeId }) =>
-        fetch(`/api/charges/${expenseId}/${chargeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+      // Always mark what they owe you as paid immediately
+      await Promise.all(entry.owesYou.map(r =>
+        fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paid: true }),
         })
       ));
-      setCompletingResumen(prev => { const n = new Set(prev); n.delete(name); return n; });
-      await fetchExpenses();
+
+      if (net >= 0) {
+        // They owe you more → mark your debts to them as paid directly too
+        await Promise.all(entry.youOwe.map(r =>
+          fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paid: true }),
+          })
+        ));
+      } else {
+        // You owe them more → send payment request notifications
+        await Promise.all(entry.youOwe.map(r =>
+          fetch(`/api/charges/${r.expenseId}/${r.chargeId}/request`, { method: 'POST' })
+        ));
+        showToast('Solicitudes enviadas. Esperando confirmación.', 'info');
+      }
+
+      setCompletingResumen(prev => { const n = new Set(prev); n.delete(entry.name); return n; });
+      await Promise.all([fetchExpenses(), fetchIncoming()]);
     }, 900);
   }
 
@@ -1756,58 +1784,83 @@ export default function GastosPage() {
                   <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin deudas pendientes</p>
                 </div>
               ) : resumenData.map((entry, idx) => {
-                const total = entry.rows.reduce((s, r) => s + r.amount, 0);
+                const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
+                const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+                const net = totalOwesYou - totalYouOwe;
                 const isCompletingCard = completingResumen.has(entry.name);
+                const allRows = [...entry.owesYou, ...entry.youOwe];
                 return (
                   <div key={entry.name}
                     className={isCompletingCard ? 'completing' : ''}
-                    style={{
-                      background: 'var(--surface2)', border: '1px solid var(--border)',
-                      borderRadius: 12, padding: '1rem 1.1rem 2.8rem 1.1rem', marginBottom: 12,
-                      position: 'relative',
-                    }}>
-                    {/* Mark all paid btn */}
-                    <button
-                      onClick={() => { setMarkAllTarget({ name: entry.name, idx }); setShowMarkAllConfirm(true); }}
-                      title="Marcar todo pagado"
-                      style={{
-                        position: 'absolute', bottom: '.7rem', left: '.7rem',
-                        background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)',
-                        color: 'rgba(52,211,153,.45)', cursor: 'pointer', padding: '5px 7px',
-                        borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit',
-                      }}>
-                      <i className="bi bi-check-all" />
-                    </button>
-                    {/* Copy btn */}
-                    <button
-                      onClick={() => copyResumen(entry.name, entry.rows)}
-                      title="Copiar"
-                      style={{
-                        position: 'absolute', bottom: '.7rem', right: '.7rem',
-                        background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)',
-                        color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px',
-                        borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit',
-                      }}>
-                      <i className="bi bi-clipboard" />
-                    </button>
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '1rem 1.1rem', marginBottom: 12, position: 'relative' }}>
                     {/* Header */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <span style={{ fontSize: '1rem', fontWeight: 700 }}>
-                        <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />
-                        {entry.name}
+                        <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />{entry.name}
                       </span>
-                      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--gold2)' }}>${fmt(total)}</span>
+                      <span style={{ fontSize: '1rem', fontWeight: 700, color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>
+                        {net >= 0 ? `+$${fmt(net)}` : `-$${fmt(Math.abs(net))}`}
+                      </span>
                     </div>
-                    {/* Rows */}
-                    {entry.rows.map((r, ri) => (
-                      <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.3rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
-                        <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
-                          {r.expenseName}
-                          <span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
-                        </span>
-                        <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+
+                    {/* Te debe section */}
+                    {entry.owesYou.length > 0 && (
+                      <div style={{ marginBottom: entry.youOwe.length > 0 ? 10 : 0 }}>
+                        <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
+                          Te debe
+                        </div>
+                        {entry.owesYou.map((r, ri) => (
+                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                            </span>
+                            <span style={{ fontWeight: 500, color: 'var(--gold2)', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                          </div>
+                        ))}
+                        {entry.owesYou.length > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: 'var(--gold)', fontWeight: 600 }}>
+                            Subtotal ${fmt(totalOwesYou)}
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )}
+
+                    {/* Les debes section */}
+                    {entry.youOwe.length > 0 && (
+                      <div>
+                        {entry.owesYou.length > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,.07)', marginBottom: 10 }} />}
+                        <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#fca5a5', marginBottom: 4 }}>
+                          Les debes
+                        </div>
+                        {entry.youOwe.map((r, ri) => (
+                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                            </span>
+                            <span style={{ fontWeight: 500, color: '#fca5a5', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                          </div>
+                        ))}
+                        {entry.youOwe.length > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: '#fca5a5', fontWeight: 600 }}>
+                            Subtotal ${fmt(totalYouOwe)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Footer buttons */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,.07)' }}>
+                      <button onClick={() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); }}
+                        title="Marcar todo pagado"
+                        style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                        <i className="bi bi-check-all" />
+                      </button>
+                      <button onClick={() => copyResumen(entry.name, allRows)}
+                        title="Copiar"
+                        style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px', borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                        <i className="bi bi-clipboard" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1817,30 +1870,40 @@ export default function GastosPage() {
       )}
 
       {/* ══ OVERLAY: Confirm mark all paid ══ */}
-      {showMarkAllConfirm && markAllTarget && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#1a1500', border: '1px solid rgba(201,154,20,.15)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 300, width: '88%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
-            <i className="bi bi-check-circle" style={{ fontSize: '2rem', color: '#34d399', display: 'block', marginBottom: 12 }} />
-            <p style={{ margin: '0 0 .4rem', fontWeight: 600 }}>¿Marcar todo como pagado?</p>
-            <p style={{ margin: '0 0 1.2rem', fontSize: '.88rem', color: 'var(--text-muted)' }}>{markAllTarget.name}</p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <button onClick={() => { setShowMarkAllConfirm(false); setMarkAllTarget(null); }}
-                style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit' }}>
-                Cancelar
-              </button>
-              <button onClick={() => {
-                const name = markAllTarget.name;
-                setShowMarkAllConfirm(false);
-                setMarkAllTarget(null);
-                handleMarkAllPaid(name);
-              }}
-                style={{ background: 'rgba(52,211,153,.15)', border: '1px solid rgba(52,211,153,.3)', color: '#34d399', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontWeight: 600, fontFamily: 'inherit' }}>
-                Confirmar
-              </button>
+      {showMarkAllConfirm && markAllTarget && (() => {
+        const { entry } = markAllTarget;
+        const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
+        const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+        const net = totalOwesYou - totalYouOwe;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1a1500', border: '1px solid rgba(201,154,20,.15)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 320, width: '88%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
+              <i className="bi bi-check-all" style={{ fontSize: '2rem', color: '#34d399', display: 'block', marginBottom: 12 }} />
+              <p style={{ margin: '0 0 .4rem', fontWeight: 600 }}>¿Liquidar todo con {entry.name}?</p>
+              {entry.youOwe.length > 0 && net < 0 ? (
+                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Les debes <strong style={{ color: '#fca5a5' }}>${fmt(totalYouOwe)}</strong>.<br />
+                  Se enviará solicitud de confirmación.
+                </p>
+              ) : (
+                <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Todo se marcará como pagado directamente.
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button onClick={() => { setShowMarkAllConfirm(false); setMarkAllTarget(null); }}
+                  style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit' }}>
+                  Cancelar
+                </button>
+                <button onClick={() => { setShowMarkAllConfirm(false); setMarkAllTarget(null); handleMarkAllPaid(entry); }}
+                  style={{ background: 'rgba(52,211,153,.15)', border: '1px solid rgba(52,211,153,.3)', color: '#34d399', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontWeight: 600, fontFamily: 'inherit' }}>
+                  Confirmar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ MODAL: Friends / Amigos ══ */}
       {showFriends && (

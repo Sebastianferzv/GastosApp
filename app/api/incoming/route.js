@@ -10,6 +10,7 @@ export async function GET() {
     SELECT
       c.id, c.amount::float, c.paid, c.expense_id,
       e.name as expense_name, e.date, e.month,
+      e.user_id as from_user_id,
       u.display_name as from_name, u.username as from_username
     FROM charges c
     JOIN expenses e ON e.id = c.expense_id
@@ -26,6 +27,7 @@ export async function GET() {
     expenseName: c.expense_name,
     date: c.date ? c.date.toISOString().slice(0, 10) : null,
     month: c.month,
+    fromUserId: c.from_user_id,
     fromName: c.from_name,
     fromUsername: c.from_username,
   })));
