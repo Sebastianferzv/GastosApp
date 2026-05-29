@@ -1097,7 +1097,7 @@ export default function GastosPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       {/* ── Navbar ── */}
-      <div style={{ background: '#080600', borderBottom: '1px solid rgba(201,154,20,.15)', paddingTop: 'max(14px, env(safe-area-inset-top))', paddingBottom: '14px', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: '#080600', borderBottom: '1px solid rgba(201,154,20,.15)', paddingTop: 'calc(14px + env(safe-area-inset-top, 0px))', paddingBottom: '14px', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 700, fontSize: '1.1rem', background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
             <i className="bi bi-cash-stack" style={{ marginRight: 8 }} />
