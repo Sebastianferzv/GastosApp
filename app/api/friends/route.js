@@ -9,7 +9,7 @@ export async function GET() {
   const friends = await sql`
     SELECT
       f.id as friendship_id, f.status,
-      u.id, u.username, u.display_name,
+      u.id, u.username, u.display_name, u.avatar_url,
       CASE WHEN f.requester_id = ${session.userId} THEN 'sent' ELSE 'received' END as direction
     FROM friendships f
     JOIN users u ON u.id = CASE WHEN f.requester_id = ${session.userId} THEN f.addressee_id ELSE f.requester_id END
@@ -19,7 +19,7 @@ export async function GET() {
 
   return NextResponse.json(friends.map(f => ({
     friendshipId: f.friendship_id, status: f.status, direction: f.direction,
-    userId: f.id, username: f.username, displayName: f.display_name,
+    userId: f.id, username: f.username, displayName: f.display_name, avatarUrl: f.avatar_url,
   })));
 }
 

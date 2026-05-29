@@ -122,6 +122,8 @@ export default function GastosPage() {
   const [addPersonVal, setAddPersonVal] = useState('');
   const [showMarkAllConfirm, setShowMarkAllConfirm] = useState(false);
   const [markAllTarget, setMarkAllTarget] = useState(null); // {name, idx}
+  const [showRevertConfirm, setShowRevertConfirm] = useState(false);
+  const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
 
   // Friends modal
@@ -447,6 +449,19 @@ export default function GastosPage() {
     });
     if (res.ok) { await fetchIncoming(); showToast('Marcado como pagado.', 'success'); }
     else showToast('Error al actualizar.', 'danger');
+  }
+
+  async function revertIncomingPaid() {
+    if (!revertTarget) return;
+    const res = await fetch(`/api/charges/${revertTarget.expenseId}/${revertTarget.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paid: false }),
+    });
+    setShowRevertConfirm(false);
+    setRevertTarget(null);
+    if (res.ok) { await fetchIncoming(); showToast('Cobro revertido a pendiente.', 'info'); }
+    else showToast('Error al revertir.', 'danger');
   }
 
   // ── Delete expense ───────────────────────────────────────────────────────────
@@ -1155,7 +1170,7 @@ export default function GastosPage() {
         <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', marginBottom: 20, marginTop: 16 }}>
           {[
             { key: 'gastos', label: 'Mis gastos' },
-            { key: 'cobran', label: 'Me cobran', badge: pendingIncomingCount },
+            { key: 'cobran', label: 'Me cobran' },
           ].map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
               style={{
@@ -1595,13 +1610,20 @@ export default function GastosPage() {
                         ${fmt(item.amount)}
                       </div>
                       {item.paid ? (
-                        <span style={{ fontSize: '.8rem', color: 'var(--paid)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <i className="bi bi-check-circle-fill" /> Pagado
-                        </span>
+                        !filterIncomingPending ? (
+                          <button onClick={() => { setRevertTarget(item); setShowRevertConfirm(true); }}
+                            style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                            <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }} /> Pagado
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '.8rem', color: 'var(--paid)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <i className="bi bi-check-circle-fill" /> Pagado
+                          </span>
+                        )
                       ) : (
                         <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
                           style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                          <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Pagar
+                          <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Pagado
                         </button>
                       )}
                     </div>
@@ -1846,10 +1868,12 @@ export default function GastosPage() {
                   <p style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin amigos aún. Busca a alguien por su usuario.</p>
                 ) : acceptedFriends.map(f => (
                   <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                    <span style={{ fontSize: '.88rem' }}>
-                      <i className="bi bi-person-check-fill" style={{ marginRight: 6, color: 'var(--paid)', opacity: .7 }} />
-                      {f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span>
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <UserAvatar user={f} size={32} />
+                      <span style={{ fontSize: '.88rem' }}>
+                        {f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span>
+                      </span>
+                    </div>
                     <button onClick={() => removeFriend(f.friendshipId)}
                       style={{ background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
                       <i className="bi bi-trash" />
@@ -1910,6 +1934,30 @@ export default function GastosPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowAddPerson(false)}>Cancelar</button>
               <button className="btn-primary" onClick={saveNewPerson}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Revert payment confirm ══ */}
+      {showRevertConfirm && revertTarget && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowRevertConfirm(false)}>
+          <div className="modal-box" style={{ maxWidth: 360 }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-arrow-counterclockwise" style={{ marginRight: 8 }} />Revertir pago</span>
+              <button onClick={() => setShowRevertConfirm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '.9rem', lineHeight: 1.5 }}>
+                ¿Estás seguro de volver <strong>{revertTarget.expenseName}</strong> a <span style={{ color: '#fca5a5' }}>no pagado</span>?
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowRevertConfirm(false)}>Cancelar</button>
+              <button onClick={revertIncomingPaid}
+                style={{ background: 'rgba(248,113,113,.15)', border: '1px solid rgba(248,113,113,.3)', color: 'var(--red)', padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '.85rem', fontFamily: 'inherit' }}>
+                Sí, revertir
+              </button>
             </div>
           </div>
         </div>
