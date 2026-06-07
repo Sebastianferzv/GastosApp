@@ -793,33 +793,43 @@ export default function GastosPage() {
       e.charges.forEach(c => {
         if (c.paid) return;
         const key = c.personUserId ? `u${c.personUserId}` : `n${c.person}`;
-        getOrCreate(key, c.person, c.personUserId || null)
-          .owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
+        const ent = getOrCreate(key, c.person, c.personUserId || null);
+        if ((c.paidAmount || 0) > 0.01) {
+          ent.owesYou.push({ expenseName: e.name, amount: c.paidAmount, date: e.date, expenseId: e.id, chargeId: c.id, partial: true });
+          ent.owesYou.push({ expenseName: e.name, amount: parseFloat((c.amount - c.paidAmount).toFixed(2)), date: e.date, expenseId: e.id, chargeId: c.id });
+        } else {
+          ent.owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
+        }
       });
     });
     incoming.forEach(item => {
       if (item.paid) return;
       const key = item.fromUserId ? `u${item.fromUserId}` : `n${item.fromName}`;
-      getOrCreate(key, item.fromName, item.fromUserId || null)
-        .youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
+      const ent = getOrCreate(key, item.fromName, item.fromUserId || null);
+      if ((item.paidAmount || 0) > 0.01) {
+        ent.youOwe.push({ expenseName: item.expenseName, amount: item.paidAmount, date: item.date, expenseId: item.expenseId, chargeId: item.id, partial: true });
+        ent.youOwe.push({ expenseName: item.expenseName, amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), date: item.date, expenseId: item.expenseId, chargeId: item.id });
+      } else {
+        ent.youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
+      }
     });
+    const netOf = arr => arr.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
     return Object.values(byKey)
-      .filter(e => {
-        const net = e.owesYou.reduce((s, r) => s + r.amount, 0) - e.youOwe.reduce((s, r) => s + r.amount, 0);
-        return net !== 0;
-      })
+      .filter(e => netOf(e.owesYou) - netOf(e.youOwe) !== 0)
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
   async function handleMarkAllPaid(entry) {
-    const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
-    const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+    const realOwesYou = entry.owesYou.filter(r => !r.partial);
+    const realYouOwe = entry.youOwe.filter(r => !r.partial);
+    const totalOwesYou = realOwesYou.reduce((s, r) => s + r.amount, 0);
+    const totalYouOwe = realYouOwe.reduce((s, r) => s + r.amount, 0);
     const net = totalOwesYou - totalYouOwe;
 
     setCompletingResumen(prev => new Set([...prev, entry.name]));
     setTimeout(async () => {
       // Always mark what they owe you as paid immediately
-      await Promise.all(entry.owesYou.map(r =>
+      await Promise.all(realOwesYou.map(r =>
         fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paid: true }),
@@ -828,7 +838,7 @@ export default function GastosPage() {
 
       if (net >= 0) {
         // They owe you more → mark your debts to them as paid directly too
-        await Promise.all(entry.youOwe.map(r =>
+        await Promise.all(realYouOwe.map(r =>
           fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paid: true }),
@@ -836,7 +846,7 @@ export default function GastosPage() {
         ));
       } else {
         // You owe them more → send payment request notifications
-        await Promise.all(entry.youOwe.map(r =>
+        await Promise.all(realYouOwe.map(r =>
           fetch(`/api/charges/${r.expenseId}/${r.chargeId}/request`, { method: 'POST' })
         ));
         showToast('Solicitudes enviadas. Esperando confirmación.', 'info');
@@ -851,7 +861,7 @@ export default function GastosPage() {
     const totalPay = parseFloat(partialAmountStr.replace(',', '.'));
     if (!totalPay || totalPay <= 0) return;
 
-    const sorted = [...entry.youOwe].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const sorted = [...entry.youOwe.filter(r => !r.partial)].sort((a, b) => (a.date < b.date ? -1 : 1));
     let remaining = totalPay;
     const payments = [];
     for (const item of sorted) {
@@ -883,17 +893,19 @@ export default function GastosPage() {
   }
 
   function copyResumen(entry) {
-    const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
-    const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+    const realOwesYou = entry.owesYou.filter(r => !r.partial);
+    const realYouOwe = entry.youOwe.filter(r => !r.partial);
+    const totalOwesYou = realOwesYou.reduce((s, r) => s + r.amount, 0);
+    const totalYouOwe = realYouOwe.reduce((s, r) => s + r.amount, 0);
     const net = totalOwesYou - totalYouOwe;
     const lines = [];
-    if (entry.owesYou.length > 0) {
+    if (realOwesYou.length > 0) {
       lines.push('Me debes:');
-      entry.owesYou.forEach(r => lines.push(`  +$${fmt(r.amount)} ${r.expenseName}`));
+      realOwesYou.forEach(r => lines.push(`  +$${fmt(r.amount)} ${r.expenseName}`));
     }
-    if (entry.youOwe.length > 0) {
+    if (realYouOwe.length > 0) {
       lines.push('Debo:');
-      entry.youOwe.forEach(r => lines.push(`  -$${fmt(r.amount)} ${r.expenseName}`));
+      realYouOwe.forEach(r => lines.push(`  -$${fmt(r.amount)} ${r.expenseName}`));
     }
     lines.push(`\nTotal: ${net >= 0 ? '+' : '-'}$${fmt(Math.abs(net))} (${net >= 0 ? 'me debes' : 'debo'})`);
     navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('Copiado al portapapeles.', 'success'));
@@ -1724,12 +1736,17 @@ export default function GastosPage() {
                 );
               }
 
-              // Group by person
+              // Group by person — split partial-paid items into two visual rows
               const byPerson = {};
               list.forEach(item => {
                 const key = item.fromName || item.fromUsername;
                 if (!byPerson[key]) byPerson[key] = [];
-                byPerson[key].push(item);
+                if ((item.paidAmount || 0) > 0.01 && !item.paid) {
+                  byPerson[key].push({ ...item, _amount: item.paidAmount, _partial: true, _key: `${item.id}_p` });
+                  byPerson[key].push({ ...item, _amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), _key: `${item.id}` });
+                } else {
+                  byPerson[key].push({ ...item, _amount: item.amount, _key: `${item.id}` });
+                }
               });
 
               return Object.entries(byPerson).map(([person, items]) => (
@@ -1741,15 +1758,19 @@ export default function GastosPage() {
                     <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
                   </div>
                   {items.map(item => (
-                    <div key={item.id} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div key={item._key} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, opacity: item._partial ? .6 : 1 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '.92rem' }}>{item.expenseName}</div>
-                        <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{fmtDate(item.date)}</div>
+                        <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: item._partial ? 'line-through' : 'none' }}>{item.expenseName}</div>
+                        <div style={{ fontSize: '.75rem', color: item._partial ? 'rgba(52,211,153,.8)' : 'var(--text-muted)' }}>
+                          {fmtDate(item.date)}{item._partial && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>✓ pagado parcialmente</span>}
+                        </div>
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item.paid ? 'var(--paid)' : 'var(--text)' }}>
-                        ${fmt(item.amount)}
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item._partial ? 'var(--paid)' : (item.paid ? 'var(--paid)' : 'var(--text)'), textDecoration: item._partial ? 'line-through' : 'none' }}>
+                        ${fmt(item._amount)}
                       </div>
-                      {item.paid ? (
+                      {item._partial ? (
+                        <span style={{ fontSize: '.8rem', color: 'var(--paid)' }}><i className="bi bi-check-circle-fill" /></span>
+                      ) : item.paid ? (
                         !filterIncomingPending ? (
                           <button onClick={() => { setRevertTarget(item); setShowRevertConfirm(true); }}
                             style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
@@ -1838,8 +1859,8 @@ export default function GastosPage() {
                   <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin deudas pendientes</p>
                 </div>
               ) : resumenData.map((entry, idx) => {
-                const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
-                const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+                const totalOwesYou = entry.owesYou.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+                const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
                 const net = totalOwesYou - totalYouOwe;
                 const isCompletingCard = completingResumen.has(entry.name);
                 const allRows = [...entry.owesYou, ...entry.youOwe];
@@ -1861,14 +1882,15 @@ export default function GastosPage() {
                           Te debe
                         </div>
                         {entry.owesYou.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
-                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
+                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: r.partial ? 'line-through' : 'none' }}>
                               {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                              {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
                             </span>
-                            <span style={{ fontWeight: 500, color: 'var(--gold2)', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: r.partial ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
                           </div>
                         ))}
-                        {entry.owesYou.length > 1 && (
+                        {entry.owesYou.filter(r => !r.partial).length > 1 && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: 'var(--gold)', fontWeight: 600 }}>
                             Subtotal ${fmt(totalOwesYou)}
                           </div>
@@ -1884,14 +1906,15 @@ export default function GastosPage() {
                           Les debes
                         </div>
                         {entry.youOwe.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
-                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
+                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: r.partial ? 'line-through' : 'none' }}>
                               {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                              {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
                             </span>
-                            <span style={{ fontWeight: 500, color: '#fca5a5', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: r.partial ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
                           </div>
                         ))}
-                        {entry.youOwe.length > 1 && (
+                        {entry.youOwe.filter(r => !r.partial).length > 1 && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: '#fca5a5', fontWeight: 600 }}>
                             Subtotal ${fmt(totalYouOwe)}
                           </div>
@@ -1916,7 +1939,7 @@ export default function GastosPage() {
                         style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
                         <i className="bi bi-check-all" />
                       </button>
-                      {entry.youOwe.length > 0 && (
+                      {entry.youOwe.some(r => !r.partial) && (
                         <button onClick={() => { setPartialTarget(entry); setPartialAmountStr(''); setShowPartialModal(true); }}
                           title="Pago parcial"
                           style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.2)', color: 'rgba(96,165,250,.7)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
@@ -1940,8 +1963,8 @@ export default function GastosPage() {
       {/* ══ OVERLAY: Confirm mark all paid ══ */}
       {showMarkAllConfirm && markAllTarget && (() => {
         const { entry } = markAllTarget;
-        const totalOwesYou = entry.owesYou.reduce((s, r) => s + r.amount, 0);
-        const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+        const totalOwesYou = entry.owesYou.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+        const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
         const net = totalOwesYou - totalYouOwe;
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1981,9 +2004,9 @@ export default function GastosPage() {
       {/* ══ OVERLAY: Partial payment ══ */}
       {showPartialModal && partialTarget && (() => {
         const entry = partialTarget;
-        const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+        const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
         const payNum = parseFloat(partialAmountStr.replace(',', '.')) || 0;
-        const sorted = [...entry.youOwe].sort((a, b) => (a.date < b.date ? -1 : 1));
+        const sorted = [...entry.youOwe.filter(r => !r.partial)].sort((a, b) => (a.date < b.date ? -1 : 1));
         let rem = payNum;
         const preview = [];
         for (const item of sorted) {
