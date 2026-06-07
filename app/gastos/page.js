@@ -1648,21 +1648,25 @@ export default function GastosPage() {
                       ) : e.charges.length > 0 ? (
                         <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12 }}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                            {e.charges.map(c => (
-                              <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
-                                style={{
-                                  borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                                  border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
-                                  background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
-                                  color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
-                                  whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  fontFamily: 'inherit',
-                                }}>
-                                <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
-                                {c.person}
-                                <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
-                              </button>
-                            ))}
+                            {e.charges.map(c => {
+                              const isPartial = !c.paid && (c.paidAmount || 0) > 0;
+                              return (
+                                <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
+                                  style={{
+                                    borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
+                                    border: c.paid ? '1px solid rgba(52,211,153,.3)' : isPartial ? '1px solid rgba(96,165,250,.35)' : '1px solid rgba(255,255,255,.1)',
+                                    background: c.paid ? 'rgba(52,211,153,.13)' : isPartial ? 'rgba(59,130,246,.08)' : 'rgba(255,255,255,.05)',
+                                    color: c.paid ? 'var(--paid)' : isPartial ? '#93c5fd' : 'rgba(255,255,255,.5)',
+                                    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    fontFamily: 'inherit',
+                                  }}>
+                                  <i className={`bi ${c.paid ? 'bi-check-circle-fill' : isPartial ? 'bi-circle-half' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
+                                  {c.person}
+                                  <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
+                                  {isPartial && <span style={{ fontSize: '.72rem', opacity: .75 }}>+${fmt(c.paidAmount)} pag.</span>}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : null}
@@ -1742,6 +1746,12 @@ export default function GastosPage() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600, fontSize: '.92rem' }}>{item.expenseName}</div>
                         <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{fmtDate(item.date)}</div>
+                        {item.paidAmount > 0 && !item.paid && (
+                          <div style={{ fontSize: '.72rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                            <i className="bi bi-check-circle-fill" style={{ fontSize: '.65rem' }} />
+                            ya pagado ${fmt(item.paidAmount)}
+                          </div>
+                        )}
                       </div>
                       <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item.paid ? 'var(--paid)' : 'var(--text)' }}>
                         ${fmt(item.amount)}
