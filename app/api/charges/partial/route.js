@@ -13,8 +13,7 @@ export async function POST(request) {
 
   for (const { expenseId, chargeId, requestedAmount } of payments) {
     const [charge] = await sql`
-      SELECT c.id, c.amount::float, COALESCE(c.paid_amount, 0)::float as paid_amount
-      FROM charges c
+      SELECT c.id, c.amount::float FROM charges c
       JOIN expenses e ON e.id = c.expense_id
       WHERE c.id = ${chargeId} AND c.expense_id = ${expenseId}
         AND c.person_user_id = ${session.userId} AND c.paid = FALSE
@@ -32,8 +31,7 @@ export async function POST(request) {
         AND user_id = ${expense.user_id} AND read = FALSE
     `;
 
-    const remaining = charge.amount - charge.paid_amount;
-    const isPartial = parseFloat(requestedAmount) < remaining - 0.01;
+    const isPartial = parseFloat(requestedAmount) < charge.amount - 0.01;
     const msg = isPartial
       ? `${payer.display_name} quiere pagar $${requestedAmount} parcialmente en "${expense.name}"`
       : `${payer.display_name} quiere confirmar su pago en "${expense.name}"`;
