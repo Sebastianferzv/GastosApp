@@ -123,6 +123,7 @@ export default function GastosPage() {
   const [showMarkAllConfirm, setShowMarkAllConfirm] = useState(false);
   const [markAllTarget, setMarkAllTarget] = useState(null); // {name, idx}
   const [showAbout, setShowAbout] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
@@ -1240,11 +1241,15 @@ export default function GastosPage() {
                       <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin notificaciones</div>
                     ) : notifications.map(n => {
                       const isPaidAction = n.type === 'charge_paid' && !n.read;
+                      const isUpdate = n.type === 'app_update';
                       return (
                         <div key={n.id}
-                          onClick={() => !n.read && !isPaidAction && markNotificationsRead([n.id])}
-                          style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: (!n.read && !isPaidAction) ? 'pointer' : 'default', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                          <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : 'bi-cash-coin'}`} style={{ color: 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
+                          onClick={() => {
+                            if (isUpdate) { setShowUpdateModal(true); setShowNotifications(false); if (!n.read) markNotificationsRead([n.id]); }
+                            else if (!n.read && !isPaidAction) markNotificationsRead([n.id]);
+                          }}
+                          style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: (isUpdate || (!n.read && !isPaidAction)) ? 'pointer' : 'default', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                          <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : isUpdate ? 'bi-stars' : 'bi-cash-coin'}`} style={{ color: isUpdate ? '#a78bfa' : 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: '.85rem', color: n.read ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.4 }}>{n.message}</div>
                             <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 3 }}>{relativeTime(n.createdAt)}</div>
@@ -1258,6 +1263,11 @@ export default function GastosPage() {
                                   style={{ flex: 1, background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.3)', color: 'var(--red)', padding: '5px 0', borderRadius: 7, cursor: 'pointer', fontSize: '.78rem', fontWeight: 600, fontFamily: 'inherit' }}>
                                   <i className="bi bi-x-lg" style={{ marginRight: 4 }} />Rechazar
                                 </button>
+                              </div>
+                            )}
+                            {isUpdate && (
+                              <div style={{ marginTop: 5, fontSize: '.72rem', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <i className="bi bi-arrow-right-circle" /> Ver novedades
                               </div>
                             )}
                           </div>
@@ -2263,6 +2273,62 @@ export default function GastosPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowAddPerson(false)}>Cancelar</button>
               <button className="btn-primary" onClick={saveNewPerson}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: App update ══ */}
+      {showUpdateModal && (
+        <div className="overlay" onClick={() => setShowUpdateModal(false)}>
+          <div className="modal-box" style={{ maxWidth: 340 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <i className="bi bi-stars" style={{ color: '#a78bfa' }} /> Novedades
+              </span>
+              <button onClick={() => setShowUpdateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ paddingTop: 0 }}>
+              <div style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#a78bfa', marginBottom: 16 }}>Junio 2026</div>
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(96,165,250,.12)', border: '1px solid rgba(96,165,250,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="bi bi-cash-coin" style={{ color: '#60a5fa', fontSize: '1.1rem' }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Pagos parciales</div>
+                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Ahora puedes pagar una parte de lo que debes. En el Resumen, usa el botón <i className="bi bi-cash-coin" style={{ color: '#60a5fa' }} /> para elegir cuánto quieres pagar — el sistema distribuye el monto entre tus deudas más antiguas primero.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="bi bi-bar-chart-line" style={{ color: 'var(--paid)', fontSize: '1.1rem' }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Vista actualizada</div>
+                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    En <strong style={{ color: 'var(--text)' }}>Resumen</strong>, <strong style={{ color: 'var(--text)' }}>Me cobran</strong> y <strong style={{ color: 'var(--text)' }}>Mis gastos</strong> verás separada la parte ya pagada (verde) de la parte pendiente, para cada cobro con pago parcial.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(251,191,36,.1)', border: '1px solid rgba(251,191,36,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="bi bi-bell" style={{ color: '#fbbf24', fontSize: '1.1rem' }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Confirmación del dueño</div>
+                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    El pago parcial llega como notificación al dueño del gasto. Solo se aplica cuando él lo acepta.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: '0 1.2rem 1.2rem' }}>
+              <button onClick={() => setShowUpdateModal(false)} className="btn-primary" style={{ width: '100%' }}>Entendido</button>
             </div>
           </div>
         </div>
