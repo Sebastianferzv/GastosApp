@@ -1671,7 +1671,7 @@ export default function GastosPage() {
                                       borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'default', opacity: .55,
                                       border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.13)',
                                       color: 'var(--paid)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                      fontFamily: 'inherit', textDecoration: 'line-through',
+                                      fontFamily: 'inherit',
                                     }}>
                                     <i className="bi bi-check-circle-fill" style={{ fontSize: '.8rem' }} />
                                     {c.person}
@@ -1788,12 +1788,12 @@ export default function GastosPage() {
                   {items.map(item => (
                     <div key={item._key} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, opacity: item._partial ? .6 : 1 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: item._partial ? 'line-through' : 'none' }}>{item.expenseName}</div>
+                        <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: 'none' }}>{item.expenseName}</div>
                         <div style={{ fontSize: '.75rem', color: item._partial ? 'rgba(52,211,153,.8)' : 'var(--text-muted)' }}>
                           {fmtDate(item.date)}{item._partial && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>✓ pagado parcialmente</span>}
                         </div>
                       </div>
-                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item._partial ? 'var(--paid)' : (item.paid ? 'var(--paid)' : 'var(--text)'), textDecoration: item._partial ? 'line-through' : 'none' }}>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item._partial ? 'var(--paid)' : (item.paid ? 'var(--paid)' : 'var(--text)'), textDecoration: 'none' }}>
                         ${fmt(item._amount)}
                       </div>
                       {item._partial ? (
@@ -1911,11 +1911,11 @@ export default function GastosPage() {
                         </div>
                         {entry.owesYou.map((r, ri) => (
                           <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: r.partial ? 'line-through' : 'none' }}>
+                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
                               {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                               {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
                             </span>
-                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: r.partial ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
+                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
                           </div>
                         ))}
                         {entry.owesYou.filter(r => !r.partial).length > 1 && (
@@ -1935,11 +1935,11 @@ export default function GastosPage() {
                         </div>
                         {entry.youOwe.map((r, ri) => (
                           <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: r.partial ? 'line-through' : 'none' }}>
+                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
                               {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                               {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
                             </span>
-                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: r.partial ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
+                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
                           </div>
                         ))}
                         {entry.youOwe.filter(r => !r.partial).length > 1 && (
