@@ -126,6 +126,9 @@ export default function GastosPage() {
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
+  const [showPartialModal, setShowPartialModal] = useState(false);
+  const [partialTarget, setPartialTarget] = useState(null);
+  const [partialAmountStr, setPartialAmountStr] = useState('');
 
   // Friends modal
   const [friendSearch, setFriendSearch] = useState('');
@@ -839,6 +842,41 @@ export default function GastosPage() {
       setCompletingResumen(prev => { const n = new Set(prev); n.delete(entry.name); return n; });
       await Promise.all([fetchExpenses(), fetchIncoming()]);
     }, 900);
+  }
+
+  async function handlePartialPayment(entry) {
+    const totalPay = parseFloat(partialAmountStr.replace(',', '.'));
+    if (!totalPay || totalPay <= 0) return;
+
+    const sorted = [...entry.youOwe].sort((a, b) => (a.date < b.date ? -1 : 1));
+    let remaining = totalPay;
+    const payments = [];
+    for (const item of sorted) {
+      if (remaining < 0.01) break;
+      const pay = parseFloat(Math.min(remaining, item.amount).toFixed(2));
+      payments.push({ expenseId: item.expenseId, chargeId: item.chargeId, requestedAmount: pay });
+      remaining = parseFloat((remaining - pay).toFixed(2));
+    }
+
+    setShowPartialModal(false);
+    setPartialAmountStr('');
+
+    const res = await fetch('/api/charges/partial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payments }),
+    });
+
+    if (res.ok) {
+      setPendingRequests(prev => {
+        const s = new Set(prev);
+        payments.forEach(p => s.add(p.chargeId));
+        return s;
+      });
+      showToast('Solicitud enviada. Esperando confirmación.', 'info');
+    } else {
+      showToast('Error al enviar solicitud.', 'danger');
+    }
   }
 
   function copyResumen(entry) {
@@ -1875,6 +1913,13 @@ export default function GastosPage() {
                         style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
                         <i className="bi bi-check-all" />
                       </button>
+                      {entry.youOwe.length > 0 && (
+                        <button onClick={() => { setPartialTarget(entry); setPartialAmountStr(''); setShowPartialModal(true); }}
+                          title="Pago parcial"
+                          style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.2)', color: 'rgba(96,165,250,.7)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                          <i className="bi bi-cash-coin" />
+                        </button>
+                      )}
                       <button onClick={() => copyResumen(entry)}
                         title="Copiar"
                         style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px', borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit' }}>
@@ -1923,6 +1968,80 @@ export default function GastosPage() {
                 <button onClick={() => { setShowMarkAllConfirm(false); setMarkAllTarget(null); handleMarkAllPaid(entry); }}
                   style={{ background: 'rgba(52,211,153,.15)', border: '1px solid rgba(52,211,153,.3)', color: '#34d399', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontWeight: 600, fontFamily: 'inherit' }}>
                   Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══ OVERLAY: Partial payment ══ */}
+      {showPartialModal && partialTarget && (() => {
+        const entry = partialTarget;
+        const totalYouOwe = entry.youOwe.reduce((s, r) => s + r.amount, 0);
+        const payNum = parseFloat(partialAmountStr.replace(',', '.')) || 0;
+        const sorted = [...entry.youOwe].sort((a, b) => (a.date < b.date ? -1 : 1));
+        let rem = payNum;
+        const preview = [];
+        for (const item of sorted) {
+          if (rem < 0.01) break;
+          const pay = Math.min(rem, item.amount);
+          preview.push({ ...item, pay, isPartial: pay < item.amount - 0.01 });
+          rem -= pay;
+        }
+        const isValid = payNum > 0;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={e => e.target === e.currentTarget && setShowPartialModal(false)}>
+            <div style={{ background: '#0e1520', border: '1px solid rgba(59,130,246,.2)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 340, width: '92%', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
+              <i className="bi bi-cash-coin" style={{ fontSize: '1.8rem', color: '#60a5fa', display: 'block', marginBottom: 10, textAlign: 'center' }} />
+              <p style={{ margin: '0 0 .2rem', fontWeight: 600, textAlign: 'center' }}>Pago parcial a {entry.name}</p>
+              <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Total pendiente: <span style={{ color: '#fca5a5' }}>${fmt(totalYouOwe)}</span>
+              </p>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                  Monto a pagar
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder={`Máx $${fmt(totalYouOwe)}`}
+                  value={partialAmountStr}
+                  onChange={e => setPartialAmountStr(e.target.value)}
+                  autoFocus
+                  style={{ width: '100%', boxSizing: 'border-box', textAlign: 'right', fontSize: '1.1rem', fontWeight: 700 }}
+                />
+              </div>
+              {payNum > 0 && (
+                <div style={{ marginBottom: 12, background: 'rgba(255,255,255,.04)', borderRadius: 8, padding: '8px 10px', fontSize: '.8rem' }}>
+                  {preview.map((item, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', gap: 8 }}>
+                      <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {item.expenseName}
+                        {item.isPartial && <span style={{ color: '#93c5fd', marginLeft: 4 }}>(parcial)</span>}
+                      </span>
+                      <span style={{ color: item.isPartial ? '#93c5fd' : '#34d399', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        ${fmt(item.pay)}{item.isPartial && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> / ${fmt(item.amount)}</span>}
+                      </span>
+                    </div>
+                  ))}
+                  {payNum > totalYouOwe + 0.01 && (
+                    <p style={{ margin: '6px 0 0', color: '#fbbf24', fontSize: '.76rem' }}>
+                      El monto supera la deuda — se cubrirán todos los cobros.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                <button onClick={() => { setShowPartialModal(false); setPartialAmountStr(''); }}
+                  style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '7px 18px', borderRadius: 9, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit' }}>
+                  Cancelar
+                </button>
+                <button onClick={() => handlePartialPayment(entry)}
+                  disabled={!isValid}
+                  style={{ background: isValid ? 'rgba(59,130,246,.15)' : 'rgba(255,255,255,.05)', border: `1px solid ${isValid ? 'rgba(59,130,246,.4)' : 'rgba(255,255,255,.1)'}`, color: isValid ? '#60a5fa' : 'var(--text-muted)', padding: '7px 18px', borderRadius: 9, cursor: isValid ? 'pointer' : 'default', fontSize: '.85rem', fontWeight: 600, fontFamily: 'inherit' }}>
+                  Enviar solicitud
                 </button>
               </div>
             </div>
