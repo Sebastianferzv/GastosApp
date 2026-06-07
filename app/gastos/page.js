@@ -791,14 +791,14 @@ export default function GastosPage() {
         if (c.paid) return;
         const key = c.personUserId ? `u${c.personUserId}` : `n${c.person}`;
         getOrCreate(key, c.person, c.personUserId || null)
-          .owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
+          .owesYou.push({ expenseName: e.name, amount: c.amount, paidAmount: c.paidAmount || 0, date: e.date, expenseId: e.id, chargeId: c.id });
       });
     });
     incoming.forEach(item => {
       if (item.paid) return;
       const key = item.fromUserId ? `u${item.fromUserId}` : `n${item.fromName}`;
       getOrCreate(key, item.fromName, item.fromUserId || null)
-        .youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
+        .youOwe.push({ expenseName: item.expenseName, amount: item.amount, paidAmount: item.paidAmount || 0, date: item.date, expenseId: item.expenseId, chargeId: item.id });
     });
     return Object.values(byKey)
       .filter(e => {
@@ -1857,14 +1857,28 @@ export default function GastosPage() {
                         <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
                           Te debe
                         </div>
-                        {entry.owesYou.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
-                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
-                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
-                            </span>
-                            <span style={{ fontWeight: 500, color: 'var(--gold2)', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
-                          </div>
-                        ))}
+                        {entry.owesYou.flatMap((r, ri) => {
+                          const rows = [];
+                          if (r.paidAmount > 0) rows.push(
+                            <div key={`oy-${ri}-p`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                              <span style={{ color: '#34d399', flex: 1, paddingRight: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <i className="bi bi-check-circle-fill" style={{ fontSize: '.72rem', flexShrink: 0 }} />
+                                <span>{r.expenseName}</span>
+                                <span style={{ opacity: .5, fontSize: '.72rem' }}>· pagado</span>
+                              </span>
+                              <span style={{ fontWeight: 500, color: '#34d399', whiteSpace: 'nowrap' }}>${fmt(r.paidAmount)}</span>
+                            </div>
+                          );
+                          rows.push(
+                            <div key={`oy-${ri}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                              <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                                {r.expenseName}{r.paidAmount > 0 && <span style={{ opacity: .35, marginLeft: 5, fontSize: '.72rem' }}>· pendiente</span>}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                              </span>
+                              <span style={{ fontWeight: 500, color: 'var(--gold2)', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                            </div>
+                          );
+                          return rows;
+                        })}
                         {entry.owesYou.length > 1 && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: 'var(--gold)', fontWeight: 600 }}>
                             Subtotal ${fmt(totalOwesYou)}
@@ -1880,14 +1894,28 @@ export default function GastosPage() {
                         <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#fca5a5', marginBottom: 4 }}>
                           Les debes
                         </div>
-                        {entry.youOwe.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
-                            <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
-                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
-                            </span>
-                            <span style={{ fontWeight: 500, color: '#fca5a5', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
-                          </div>
-                        ))}
+                        {entry.youOwe.flatMap((r, ri) => {
+                          const rows = [];
+                          if (r.paidAmount > 0) rows.push(
+                            <div key={`yo-${ri}-p`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                              <span style={{ color: '#34d399', flex: 1, paddingRight: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <i className="bi bi-check-circle-fill" style={{ fontSize: '.72rem', flexShrink: 0 }} />
+                                <span>{r.expenseName}</span>
+                                <span style={{ opacity: .5, fontSize: '.72rem' }}>· pagado</span>
+                              </span>
+                              <span style={{ fontWeight: 500, color: '#34d399', whiteSpace: 'nowrap' }}>${fmt(r.paidAmount)}</span>
+                            </div>
+                          );
+                          rows.push(
+                            <div key={`yo-${ri}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem' }}>
+                              <span style={{ color: 'var(--text-muted)', flex: 1, paddingRight: 8 }}>
+                                {r.expenseName}{r.paidAmount > 0 && <span style={{ opacity: .35, marginLeft: 5, fontSize: '.72rem' }}>· pendiente</span>}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                              </span>
+                              <span style={{ fontWeight: 500, color: '#fca5a5', whiteSpace: 'nowrap' }}>${fmt(r.amount)}</span>
+                            </div>
+                          );
+                          return rows;
+                        })}
                         {entry.youOwe.length > 1 && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: '#fca5a5', fontWeight: 600 }}>
                             Subtotal ${fmt(totalYouOwe)}

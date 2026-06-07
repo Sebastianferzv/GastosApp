@@ -12,7 +12,9 @@ export async function GET() {
         json_build_object(
           'id', c.id, 'person', c.person_name,
           'personUserId', c.person_user_id,
-          'amount', c.amount::float, 'paid', c.paid
+          'amount', (c.amount - COALESCE(c.paid_amount, 0))::float,
+          'paidAmount', COALESCE(c.paid_amount, 0)::float,
+          'paid', c.paid
         ) ORDER BY c.id
       ) FILTER (WHERE c.id IS NOT NULL), '[]') as charges
     FROM expenses e

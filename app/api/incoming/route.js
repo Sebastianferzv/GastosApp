@@ -9,7 +9,8 @@ export async function GET() {
   const charges = await sql`
     SELECT
       c.id,
-      c.amount::float,
+      (c.amount - COALESCE(c.paid_amount, 0))::float as amount,
+      COALESCE(c.paid_amount, 0)::float as paid_amount,
       c.paid, c.expense_id,
       e.name as expense_name, e.date, e.month,
       e.user_id as from_user_id,
@@ -25,6 +26,7 @@ export async function GET() {
     id: c.id,
     expenseId: c.expense_id,
     amount: c.amount,
+    paidAmount: c.paid_amount,
     paid: c.paid,
     expenseName: c.expense_name,
     date: c.date ? c.date.toISOString().slice(0, 10) : null,
