@@ -19,23 +19,27 @@ export async function POST(request, { params }) {
   if (notif.type === 'charge_paid' && notif.reference_id) {
     const chargeId = notif.reference_id;
     const [charge] = await sql`
-      SELECT c.id, c.amount::float FROM charges c
+      SELECT c.id, c.amount::float, c.expense_id, c.person_name, c.person_user_id
+      FROM charges c
       JOIN expenses e ON e.id = c.expense_id
       WHERE c.id = ${chargeId} AND e.user_id = ${session.userId}
     `;
     if (charge) {
       if (action === 'accept') {
         if (notif.amount != null) {
-          // Partial payment: accumulate paid_amount, mark fully paid if complete
-          await sql`
-            UPDATE charges
-            SET paid_amount = LEAST(COALESCE(paid_amount, 0) + ${notif.amount}, amount)
-            WHERE id = ${chargeId}
-          `;
-          await sql`
-            UPDATE charges SET paid = TRUE
-            WHERE id = ${chargeId} AND COALESCE(paid_amount, 0) >= amount
-          `;
+          const partialAmt = parseFloat(notif.amount);
+          if (partialAmt >= charge.amount - 0.01) {
+            // Covers the full remaining charge
+            await sql`UPDATE charges SET paid = TRUE WHERE id = ${chargeId}`;
+          } else {
+            // Split: mark original as paid with partial amount, insert remainder as new charge
+            const remainder = parseFloat((charge.amount - partialAmt).toFixed(2));
+            await sql`UPDATE charges SET amount = ${partialAmt}, paid = TRUE WHERE id = ${chargeId}`;
+            await sql`
+              INSERT INTO charges (expense_id, person_name, person_user_id, amount)
+              VALUES (${charge.expense_id}, ${charge.person_name}, ${charge.person_user_id}, ${remainder})
+            `;
+          }
         } else {
           await sql`UPDATE charges SET paid = TRUE WHERE id = ${chargeId}`;
         }
