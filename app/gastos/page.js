@@ -326,11 +326,14 @@ export default function GastosPage() {
     if (res.ok) {
       setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
       if (action === 'accept') {
-        await fetchExpenses();
+        await Promise.all([fetchExpenses(), fetchIncoming()]);
         showToast('Pago confirmado.', 'success');
       } else {
         showToast('Solicitud rechazada.', 'info');
       }
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Error al procesar la solicitud.', 'danger');
     }
   }
 
