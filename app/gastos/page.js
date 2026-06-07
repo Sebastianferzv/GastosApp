@@ -1556,8 +1556,8 @@ export default function GastosPage() {
               </div>
             ) : (
               filteredExpenses.map(e => {
-                const totalPaid = e.charges.filter(c => c.paid).reduce((s, c) => s + c.amount, 0);
-                const pendiente = e.charges.reduce((s, c) => s + c.amount, 0) - totalPaid;
+                const totalPaid = e.charges.reduce((s, c) => s + (c.paid ? c.amount : (c.paidAmount || 0)), 0);
+                const pendiente = e.charges.reduce((s, c) => s + (c.paid ? 0 : c.amount - (c.paidAmount || 0)), 0);
                 const myShare = e.myShare ?? Math.round(e.total / (e.charges.length + 1) * 100) / 100;
                 const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
                 const isEditing = editingId === e.id;
@@ -1663,21 +1663,49 @@ export default function GastosPage() {
                       ) : e.charges.length > 0 ? (
                         <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12 }}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                            {e.charges.map(c => (
-                              <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
-                                style={{
-                                  borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                                  border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
-                                  background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
-                                  color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
-                                  whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  fontFamily: 'inherit',
-                                }}>
-                                <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
-                                {c.person}
-                                <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
-                              </button>
-                            ))}
+                            {e.charges.flatMap(c => {
+                              if ((c.paidAmount || 0) > 0.01 && !c.paid) {
+                                return [
+                                  <button key={`${c.id}_p`} disabled
+                                    style={{
+                                      borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'default', opacity: .55,
+                                      border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.13)',
+                                      color: 'var(--paid)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                      fontFamily: 'inherit', textDecoration: 'line-through',
+                                    }}>
+                                    <i className="bi bi-check-circle-fill" style={{ fontSize: '.8rem' }} />
+                                    {c.person}
+                                    <span style={{ opacity: .65 }}>${fmt(c.paidAmount)}</span>
+                                  </button>,
+                                  <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
+                                    style={{
+                                      borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
+                                      border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)',
+                                      color: 'rgba(255,255,255,.5)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                      fontFamily: 'inherit',
+                                    }}>
+                                    <i className="bi bi-circle" style={{ fontSize: '.8rem' }} />
+                                    {c.person}
+                                    <span style={{ opacity: .65 }}>${fmt(parseFloat((c.amount - c.paidAmount).toFixed(2)))}</span>
+                                  </button>,
+                                ];
+                              }
+                              return [
+                                <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
+                                  style={{
+                                    borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
+                                    border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
+                                    background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
+                                    color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
+                                    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    fontFamily: 'inherit',
+                                  }}>
+                                  <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
+                                  {c.person}
+                                  <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
+                                </button>,
+                              ];
+                            })}
                           </div>
                         </div>
                       ) : null}
