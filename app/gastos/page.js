@@ -205,7 +205,9 @@ export default function GastosPage() {
 
   const fetchGroups = useCallback(async () => {
     const res = await fetch('/api/groups');
-    if (res.ok) setGroups(await res.json());
+    const data = await res.json().catch(() => null);
+    console.log('[fetchGroups]', res.status, data);
+    if (res.ok && data) setGroups(data);
   }, []);
 
   const fetchGroupDetail = useCallback(async (groupId) => {
@@ -979,10 +981,13 @@ export default function GastosPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newGroupName.trim() }),
     });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
       setNewGroupName(''); setShowCreateGroup(false);
       await fetchGroups();
       showToast('Grupo creado.', 'success');
+    } else {
+      showToast(data.error || 'Error al crear grupo.', 'danger');
     }
   }
 

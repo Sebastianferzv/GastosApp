@@ -9,12 +9,11 @@ export async function GET() {
   const groups = await sql`
     SELECT g.id, g.name, g.created_by,
       (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) as member_count,
-      (SELECT m.message FROM group_messages m WHERE m.group_id = g.id ORDER BY m.created_at DESC LIMIT 1) as last_message,
-      (SELECT m.created_at FROM group_messages m WHERE m.group_id = g.id ORDER BY m.created_at DESC LIMIT 1) as last_message_at
+      (SELECT m.message FROM group_messages m WHERE m.group_id = g.id ORDER BY m.created_at DESC LIMIT 1) as last_message
     FROM groups g
     JOIN group_members gm ON gm.group_id = g.id
     WHERE gm.user_id = ${session.userId}
-    ORDER BY COALESCE(last_message_at, g.created_at) DESC
+    ORDER BY g.created_at DESC
   `;
 
   return NextResponse.json(groups.map(g => ({
@@ -23,7 +22,6 @@ export async function GET() {
     createdBy: g.created_by,
     memberCount: parseInt(g.member_count),
     lastMessage: g.last_message,
-    lastMessageAt: g.last_message_at,
   })));
 }
 
