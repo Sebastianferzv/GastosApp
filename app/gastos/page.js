@@ -124,6 +124,20 @@ export default function GastosPage() {
   const [markAllTarget, setMarkAllTarget] = useState(null); // {name, idx}
   const [showAbout, setShowAbout] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  // ── Social view (Amigos + Grupos) ────────────────────────────────────────────
+  const [showSocial, setShowSocial] = useState(false);
+  const [socialTab, setSocialTab] = useState('amigos'); // 'amigos' | 'grupos'
+  const [groups, setGroups] = useState([]);
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [groupDetail, setGroupDetail] = useState(null);
+  const [groupMessages, setGroupMessages] = useState([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupMemberSearch, setGroupMemberSearch] = useState('');
+  const [groupMemberError, setGroupMemberError] = useState('');
+  const [showGroupMembers, setShowGroupMembers] = useState(false);
+  const msgEndRef = useRef(null);
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
@@ -189,6 +203,21 @@ export default function GastosPage() {
     if (res.ok) setFriends(await res.json());
   }, []);
 
+  const fetchGroups = useCallback(async () => {
+    const res = await fetch('/api/groups');
+    if (res.ok) setGroups(await res.json());
+  }, []);
+
+  const fetchGroupDetail = useCallback(async (groupId) => {
+    const res = await fetch(`/api/groups/${groupId}`);
+    if (res.ok) setGroupDetail(await res.json());
+  }, []);
+
+  const fetchGroupMessages = useCallback(async (groupId) => {
+    const res = await fetch(`/api/groups/${groupId}/messages`);
+    if (res.ok) setGroupMessages(await res.json());
+  }, []);
+
   const fetchIncoming = useCallback(async () => {
     const res = await fetch('/api/incoming');
     if (res.ok) setIncoming(await res.json());
@@ -242,6 +271,18 @@ export default function GastosPage() {
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  // Poll group messages every 4s when inside a group chat
+  useEffect(() => {
+    if (!activeGroup) return;
+    const interval = setInterval(() => fetchGroupMessages(activeGroup.id), 4000);
+    return () => clearInterval(interval);
+  }, [activeGroup, fetchGroupMessages]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (activeGroup) msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [groupMessages, activeGroup]);
 
   // ── Logout ───────────────────────────────────────────────────────────────────
   async function handleLogout() {
@@ -931,6 +972,65 @@ export default function GastosPage() {
     }
   }
 
+  // ── Groups ───────────────────────────────────────────────────────────────────
+  async function createGroup() {
+    if (!newGroupName.trim()) return;
+    const res = await fetch('/api/groups', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newGroupName.trim() }),
+    });
+    if (res.ok) {
+      setNewGroupName(''); setShowCreateGroup(false);
+      await fetchGroups();
+      showToast('Grupo creado.', 'success');
+    }
+  }
+
+  async function addGroupMember() {
+    if (!groupMemberSearch.trim() || !activeGroup) return;
+    setGroupMemberError('');
+    const res = await fetch(`/api/groups/${activeGroup.id}/members`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: groupMemberSearch.trim() }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setGroupMemberSearch('');
+      await fetchGroupDetail(activeGroup.id);
+      showToast(`${data.displayName} agregado al grupo.`, 'success');
+    } else {
+      setGroupMemberError(data.error || 'Error al agregar.');
+    }
+  }
+
+  async function removeGroupMember(userId) {
+    if (!activeGroup) return;
+    await fetch(`/api/groups/${activeGroup.id}/members`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+    await fetchGroupDetail(activeGroup.id);
+  }
+
+  async function sendGroupMessage() {
+    const msg = messageInput.trim();
+    if (!msg || !activeGroup) return;
+    setMessageInput('');
+    await fetch(`/api/groups/${activeGroup.id}/messages`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    });
+    await fetchGroupMessages(activeGroup.id);
+  }
+
+  async function openGroup(group) {
+    setActiveGroup(group);
+    setGroupMessages([]);
+    setGroupDetail(null);
+    setShowGroupMembers(false);
+    await Promise.all([fetchGroupDetail(group.id), fetchGroupMessages(group.id)]);
+  }
+
   async function handleFriendAction(id, action) {
     await fetch(`/api/friends/${id}`, {
       method: 'PUT',
@@ -1211,7 +1311,7 @@ export default function GastosPage() {
             <button style={btnStyle.contacts} onClick={() => setShowResumen(true)}>
               <i className="bi bi-bar-chart-line" style={{ marginRight: 4 }} />Resumen
             </button>
-            <button style={btnStyle.contacts} onClick={() => { setShowFriends(true); fetchFriends(); }}>
+            <button style={btnStyle.contacts} onClick={() => { setShowSocial(true); setSocialTab('amigos'); fetchFriends(); fetchGroups(); }}>
               <i className="bi bi-people" style={{ marginRight: 4 }} />Amigos
             </button>
 
@@ -2114,145 +2214,255 @@ export default function GastosPage() {
       })()}
 
       {/* ══ MODAL: Friends / Amigos ══ */}
-      {showFriends && (
-        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowFriends(false)}>
-          <div className="modal-box">
-            <div className="modal-header">
-              <span style={{ fontWeight: 600 }}><i className="bi bi-people" style={{ marginRight: 8 }} />Amigos y Contactos</span>
-              <button onClick={() => setShowFriends(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
-            </div>
-            <div className="modal-body">
-              {/* My username */}
-              {user && (
-                <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(201,154,20,.07)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ fontSize: '.85rem', color: 'var(--text-muted)' }}>
-                    Tu usuario: <strong style={{ color: 'var(--gold2)' }}>@{user.username}</strong>
-                  </span>
-                  <button onClick={() => { navigator.clipboard.writeText(user.username); showToast('Usuario copiado.', 'success'); }}
-                    style={{ background: 'none', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', borderRadius: 7, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                    <i className="bi bi-clipboard" style={{ marginRight: 4 }} />Copiar
-                  </button>
-                </div>
+      {/* ══ VISTA SOCIAL: Amigos + Grupos ══ */}
+      {showSocial && (() => {
+        const pendingFriendsSoc = friends.filter(f => f.status === 'pending' && f.direction === 'received');
+        const sentFriendsSoc = friends.filter(f => f.status === 'pending' && f.direction === 'sent');
+        const acceptedFriendsSoc = friends.filter(f => f.status === 'accepted');
+        const backBtnStyle = { background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '4px 8px', borderRadius: 7, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' };
+        const tabStyle = active => ({ flex: 1, padding: '12px 0', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.88rem', fontFamily: 'inherit', transition: 'all .15s' });
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', zIndex: 500, display: 'flex', flexDirection: 'column', overflowY: 'hidden' }}>
+            {/* Header */}
+            <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 16px', display: 'flex', alignItems: 'center', gap: 8, height: 54, flexShrink: 0 }}>
+              <button style={backBtnStyle} onClick={() => { if (activeGroup) { setActiveGroup(null); setGroupDetail(null); setGroupMessages([]); } else setShowSocial(false); }}>
+                <i className="bi bi-arrow-left" />
+              </button>
+              <span style={{ fontWeight: 600, fontSize: '1rem' }}>
+                {activeGroup ? activeGroup.name : 'Amigos y Grupos'}
+              </span>
+              {activeGroup && groupDetail && (
+                <span style={{ color: 'var(--text-muted)', fontSize: '.8rem', marginLeft: 2 }}>
+                  · {groupDetail.members?.length} miembros
+                </span>
               )}
+            </div>
 
-              {/* Add friend */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Agregar amigo</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="text" placeholder="Nombre de usuario..." value={friendSearch}
-                    onChange={e => { setFriendSearch(e.target.value); setFriendSearchError(''); }}
-                    onKeyDown={e => e.key === 'Enter' && sendFriendRequest()} />
-                  <button className="btn-primary" onClick={sendFriendRequest} style={{ whiteSpace: 'nowrap' }}>
-                    <i className="bi bi-plus-lg" />
+            {activeGroup ? (
+              /* ─── Group chat view ─── */
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Members panel (collapsible) */}
+                <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                  <button onClick={() => setShowGroupMembers(v => !v)}
+                    style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '8px 16px', fontSize: '.8rem', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' }}>
+                    <i className={`bi ${showGroupMembers ? 'bi-chevron-up' : 'bi-chevron-down'}`} />
+                    {showGroupMembers ? 'Ocultar miembros' : 'Ver miembros'}
                   </button>
+                  {showGroupMembers && groupDetail && (
+                    <div style={{ padding: '0 16px 12px' }}>
+                      {groupDetail.members.map(m => (
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <UserAvatar user={{ displayName: m.displayName, avatarUrl: m.avatarUrl }} size={26} />
+                            <span style={{ fontSize: '.85rem' }}>{m.displayName}
+                              {m.id === groupDetail.createdBy && <span style={{ marginLeft: 6, fontSize: '.7rem', color: 'var(--gold)', fontWeight: 600 }}>Admin</span>}
+                            </span>
+                          </div>
+                          {user?.id === groupDetail.createdBy && m.id !== groupDetail.createdBy && (
+                            <button onClick={() => removeGroupMember(m.id)}
+                              style={{ background: 'none', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '2px 7px', borderRadius: 6, cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit' }}>
+                              Sacar
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {user?.id === groupDetail.createdBy && (
+                        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+                          <input type="text" placeholder="Agregar por usuario..." value={groupMemberSearch}
+                            onChange={e => { setGroupMemberSearch(e.target.value); setGroupMemberError(''); }}
+                            onKeyDown={e => e.key === 'Enter' && addGroupMember()}
+                            style={{ flex: 1, fontSize: '.82rem', padding: '6px 10px' }} />
+                          <button className="btn-primary" onClick={addGroupMember} style={{ padding: '6px 10px' }}>
+                            <i className="bi bi-plus-lg" />
+                          </button>
+                        </div>
+                      )}
+                      {groupMemberError && <p style={{ color: 'var(--red)', fontSize: '.8rem', marginTop: 4 }}>{groupMemberError}</p>}
+                    </div>
+                  )}
                 </div>
-                {friendSearchError && <p style={{ color: 'var(--red)', fontSize: '.82rem', marginTop: 6 }}>{friendSearchError}</p>}
-              </div>
 
-              {/* Pending received */}
-              {pendingFriends.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
-                    Solicitudes recibidas ({pendingFriends.length})
-                  </div>
-                  {pendingFriends.map(f => (
-                    <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                      <span style={{ fontSize: '.88rem' }}>
-                        <i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />
-                        {f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span>
-                      </span>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => handleFriendAction(f.friendshipId, 'accept')}
-                          style={{ background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                          Aceptar
-                        </button>
-                        <button onClick={() => handleFriendAction(f.friendshipId, 'reject')}
-                          style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                          Rechazar
-                        </button>
+                {/* Messages */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {groupMessages.length === 0 && (
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '.85rem', marginTop: 40 }}>
+                      <i className="bi bi-chat" style={{ fontSize: '2rem', opacity: .2, display: 'block', marginBottom: 8 }} />
+                      Sin mensajes aún. ¡Escribe el primero!
+                    </div>
+                  )}
+                  {groupMessages.map((m, i) => {
+                    const isMe = m.userId === user?.id;
+                    const showName = !isMe && (i === 0 || groupMessages[i - 1].userId !== m.userId);
+                    return (
+                      <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                        {showName && <span style={{ fontSize: '.7rem', color: 'var(--text-muted)', marginBottom: 2, marginLeft: 4 }}>{m.displayName}</span>}
+                        <div style={{ maxWidth: '75%', padding: '8px 12px', borderRadius: isMe ? '14px 14px 4px 14px' : '14px 14px 14px 4px', background: isMe ? 'rgba(201,154,20,.2)' : 'var(--surface2)', border: isMe ? '1px solid rgba(201,154,20,.3)' : '1px solid var(--border)', fontSize: '.88rem', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                          {m.message}
+                        </div>
+                        <span style={{ fontSize: '.65rem', color: 'var(--text-muted)', marginTop: 2, marginLeft: 4, marginRight: 4 }}>
+                          {m.createdAt ? new Date(m.createdAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  <div ref={msgEndRef} />
                 </div>
-              )}
 
-              {/* Sent requests */}
-              {sentFriends.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
-                    Solicitudes enviadas
-                  </div>
-                  {sentFriends.map(f => (
-                    <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                      <span style={{ fontSize: '.88rem', color: 'var(--text-muted)' }}>
-                        <i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />
-                        {f.displayName} <span style={{ fontSize: '.8rem' }}>@{f.username}</span>
-                        <span style={{ marginLeft: 8, fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>Pendiente</span>
-                      </span>
-                      <button onClick={() => removeFriend(f.friendshipId)}
-                        style={{ background: 'none', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                        Cancelar
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Accepted friends */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
-                  Amigos ({acceptedFriends.length})
-                </div>
-                {acceptedFriends.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin amigos aún. Busca a alguien por su usuario.</p>
-                ) : acceptedFriends.map(f => (
-                  <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <UserAvatar user={f} size={32} />
-                      <span style={{ fontSize: '.88rem' }}>
-                        {f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span>
-                      </span>
-                    </div>
-                    <button onClick={() => removeFriend(f.friendshipId)}
-                      style={{ background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                      <i className="bi bi-trash" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Contacts section */}
-              <div>
-                <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>
-                  Contactos locales
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <input type="text" placeholder="Nombre del nuevo contacto..." value={newContactName}
-                    onChange={e => setNewContactName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addContact()} />
-                  <button className="btn-primary" onClick={addContact} style={{ whiteSpace: 'nowrap' }}>
-                    <i className="bi bi-plus-lg" />
+                {/* Message input */}
+                <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--surface)' }}>
+                  <input type="text" placeholder="Escribe un mensaje..." value={messageInput}
+                    onChange={e => setMessageInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendGroupMessage()}
+                    style={{ flex: 1 }} />
+                  <button className="btn-primary" onClick={sendGroupMessage} style={{ padding: '8px 14px' }}>
+                    <i className="bi bi-send" />
                   </button>
                 </div>
-                {contacts.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin contactos registrados</p>
-                ) : contacts.map(c => (
-                  <div key={c} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                    <span style={{ fontSize: '.88rem' }}>
-                      <i className="bi bi-person-circle" style={{ marginRight: 6, opacity: .5 }} />
-                      {c}
-                    </span>
-                    <button onClick={() => removeContact(c)}
-                      style={{ background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                      <i className="bi bi-trash" />
-                    </button>
-                  </div>
-                ))}
               </div>
-            </div>
+            ) : (
+              /* ─── Tabs: Amigos | Grupos ─── */
+              <>
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
+                  <button style={tabStyle(socialTab === 'amigos')} onClick={() => setSocialTab('amigos')}>
+                    <i className="bi bi-people" style={{ marginRight: 6 }} />Amigos
+                  </button>
+                  <button style={tabStyle(socialTab === 'grupos')} onClick={() => { setSocialTab('grupos'); fetchGroups(); }}>
+                    <i className="bi bi-grid-3x3-gap" style={{ marginRight: 6 }} />Grupos
+                  </button>
+                </div>
+
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px', maxWidth: 600, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+                  {socialTab === 'amigos' ? (
+                    /* ── Amigos tab ── */
+                    <>
+                      {user && (
+                        <div style={{ marginBottom: 16, padding: '10px 14px', background: 'rgba(201,154,20,.07)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <span style={{ fontSize: '.85rem', color: 'var(--text-muted)' }}>Tu usuario: <strong style={{ color: 'var(--gold2)' }}>@{user.username}</strong></span>
+                          <button onClick={() => { navigator.clipboard.writeText(user.username); showToast('Usuario copiado.', 'success'); }}
+                            style={{ background: 'none', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', borderRadius: 7, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
+                            <i className="bi bi-clipboard" style={{ marginRight: 4 }} />Copiar
+                          </button>
+                        </div>
+                      )}
+                      <div style={{ marginBottom: 20 }}>
+                        <label style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Agregar amigo</label>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input type="text" placeholder="Nombre de usuario..." value={friendSearch}
+                            onChange={e => { setFriendSearch(e.target.value); setFriendSearchError(''); }}
+                            onKeyDown={e => e.key === 'Enter' && sendFriendRequest()} />
+                          <button className="btn-primary" onClick={sendFriendRequest} style={{ whiteSpace: 'nowrap' }}><i className="bi bi-plus-lg" /></button>
+                        </div>
+                        {friendSearchError && <p style={{ color: 'var(--red)', fontSize: '.82rem', marginTop: 6 }}>{friendSearchError}</p>}
+                      </div>
+                      {pendingFriendsSoc.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Solicitudes recibidas ({pendingFriendsSoc.length})</div>
+                          {pendingFriendsSoc.map(f => (
+                            <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
+                              <span style={{ fontSize: '.88rem' }}><i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />{f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span></span>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => handleFriendAction(f.friendshipId, 'accept')} style={{ background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Aceptar</button>
+                                <button onClick={() => handleFriendAction(f.friendshipId, 'reject')} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Rechazar</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {sentFriendsSoc.length > 0 && (
+                        <div style={{ marginBottom: 16 }}>
+                          <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Solicitudes enviadas</div>
+                          {sentFriendsSoc.map(f => (
+                            <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
+                              <span style={{ fontSize: '.88rem', color: 'var(--text-muted)' }}><i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />{f.displayName} <span style={{ fontSize: '.8rem' }}>@{f.username}</span><span style={{ marginLeft: 8, fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>Pendiente</span></span>
+                              <button onClick={() => removeFriend(f.friendshipId)} style={{ background: 'none', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Cancelar</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Amigos ({acceptedFriendsSoc.length})</div>
+                        {acceptedFriendsSoc.length === 0 ? (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin amigos aún. Busca a alguien por su usuario.</p>
+                        ) : acceptedFriendsSoc.map(f => (
+                          <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <UserAvatar user={f} size={32} />
+                              <span style={{ fontSize: '.88rem' }}>{f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span></span>
+                            </div>
+                            <button onClick={() => removeFriend(f.friendshipId)} style={{ background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}><i className="bi bi-trash" /></button>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Contactos locales</div>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                          <input type="text" placeholder="Nombre del nuevo contacto..." value={newContactName}
+                            onChange={e => setNewContactName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && addContact()} />
+                          <button className="btn-primary" onClick={addContact} style={{ whiteSpace: 'nowrap' }}><i className="bi bi-plus-lg" /></button>
+                        </div>
+                        {contacts.length === 0 ? (
+                          <p style={{ color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin contactos registrados</p>
+                        ) : contacts.map(c => (
+                          <div key={c} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
+                            <span style={{ fontSize: '.88rem' }}><i className="bi bi-person-circle" style={{ marginRight: 6, opacity: .5 }} />{c}</span>
+                            <button onClick={() => removeContact(c)} style={{ background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}><i className="bi bi-trash" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    /* ── Grupos tab ── */
+                    <>
+                      <div style={{ marginBottom: 16 }}>
+                        {showCreateGroup ? (
+                          <div style={{ background: 'var(--surface2)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 12, padding: 14 }}>
+                            <label style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Nombre del grupo</label>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input type="text" placeholder="Ej: Casa, Viaje, Trabajo..." value={newGroupName} autoFocus
+                                onChange={e => setNewGroupName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && createGroup()} />
+                              <button className="btn-primary" onClick={createGroup} style={{ whiteSpace: 'nowrap' }}>Crear</button>
+                              <button onClick={() => { setShowCreateGroup(false); setNewGroupName(''); }}
+                                style={{ background: 'none', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button onClick={() => setShowCreateGroup(true)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(201,154,20,.08)', border: '1px dashed rgba(201,154,20,.3)', color: 'var(--gold2)', padding: '10px 16px', borderRadius: 10, cursor: 'pointer', fontSize: '.88rem', fontFamily: 'inherit', width: '100%' }}>
+                            <i className="bi bi-plus-circle" /> Crear nuevo grupo
+                          </button>
+                        )}
+                      </div>
+                      {groups.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                          <i className="bi bi-grid-3x3-gap" style={{ fontSize: '2.5rem', opacity: .2, display: 'block', marginBottom: 8 }} />
+                          <p style={{ fontSize: '.88rem' }}>Sin grupos aún</p>
+                        </div>
+                      ) : groups.map(g => (
+                        <div key={g.id} onClick={() => openGroup(g)}
+                          style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(201,154,20,.15)', border: '1px solid rgba(201,154,20,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.1rem', color: 'var(--gold2)' }}>
+                            <i className="bi bi-people-fill" />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: '.92rem' }}>{g.name}</div>
+                            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
+                              <span><i className="bi bi-person" style={{ marginRight: 3 }} />{g.memberCount}</span>
+                              {g.lastMessage && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.lastMessage}</span>}
+                            </div>
+                          </div>
+                          <i className="bi bi-chevron-right" style={{ color: 'var(--text-muted)', fontSize: '.8rem' }} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ MODAL: Add person (Otro...) ══ */}
       {showAddPerson && (
