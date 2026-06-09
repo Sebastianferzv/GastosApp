@@ -2271,17 +2271,31 @@ export default function GastosPage() {
                           )}
                         </div>
                       ))}
-                      {user?.id === groupDetail.createdBy && (
-                        <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-                          <input type="text" placeholder="Agregar por usuario..." value={groupMemberSearch}
-                            onChange={e => { setGroupMemberSearch(e.target.value); setGroupMemberError(''); }}
-                            onKeyDown={e => e.key === 'Enter' && addGroupMember()}
-                            style={{ flex: 1, fontSize: '.82rem', padding: '6px 10px' }} />
-                          <button className="btn-primary" onClick={addGroupMember} style={{ padding: '6px 10px' }}>
-                            <i className="bi bi-plus-lg" />
-                          </button>
-                        </div>
-                      )}
+                      {user?.id === groupDetail.createdBy && (() => {
+                        const memberIds = new Set(groupDetail.members.map(m => m.id));
+                        const addableFriends = friends.filter(f => f.status === 'accepted' && !memberIds.has(f.userId));
+                        if (addableFriends.length === 0) return (
+                          <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', marginTop: 8 }}>Todos tus amigos ya están en el grupo.</p>
+                        );
+                        return (
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Agregar amigo</div>
+                            {addableFriends.map(f => (
+                              <div key={f.userId} onClick={() => { setGroupMemberSearch(f.username); setGroupMemberError(''); }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, cursor: 'pointer', background: groupMemberSearch === f.username ? 'rgba(201,154,20,.12)' : 'transparent', border: groupMemberSearch === f.username ? '1px solid rgba(201,154,20,.3)' : '1px solid transparent', marginBottom: 2 }}>
+                                <UserAvatar user={f} size={24} />
+                                <span style={{ fontSize: '.85rem', flex: 1 }}>{f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.75rem' }}>@{f.username}</span></span>
+                                {groupMemberSearch === f.username && <i className="bi bi-check-circle-fill" style={{ color: 'var(--gold)' }} />}
+                              </div>
+                            ))}
+                            {groupMemberSearch && (
+                              <button className="btn-primary" onClick={addGroupMember} style={{ marginTop: 8, width: '100%', padding: '7px' }}>
+                                <i className="bi bi-plus-lg" style={{ marginRight: 6 }} />Agregar a {addableFriends.find(f => f.username === groupMemberSearch)?.displayName || groupMemberSearch}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {groupMemberError && <p style={{ color: 'var(--red)', fontSize: '.8rem', marginTop: 4 }}>{groupMemberError}</p>}
                     </div>
                   )}
