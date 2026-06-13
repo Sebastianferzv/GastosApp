@@ -2373,52 +2373,10 @@ export default function GastosPage() {
                       )}
                       {/* Buscar gente */}
                       <div style={{ marginBottom: 20 }}>
-                        <button onClick={() => { setShowAllUsers(v => !v); if (!showAllUsers) { fetchAllUsers(); setUserSearch(''); } }}
+                        <button onClick={() => { setShowAllUsers(true); fetchAllUsers(); setUserSearch(''); }}
                           style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'rgba(201,154,20,.08)', border: '1px solid rgba(201,154,20,.2)', color: 'var(--gold2)', padding: '10px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.88rem', fontFamily: 'inherit' }}>
-                          <i className={`bi ${showAllUsers ? 'bi-chevron-up' : 'bi-people'}`} />
-                          {showAllUsers ? 'Cerrar búsqueda' : 'Buscar gente'}
+                          <i className="bi bi-people" />Buscar gente
                         </button>
-                        {showAllUsers && (
-                          <div style={{ marginTop: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                            <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
-                              <input type="text" placeholder="Buscar por nombre o usuario..." value={userSearch}
-                                onChange={e => setUserSearch(e.target.value)}
-                                style={{ width: '100%', fontSize: '.85rem', boxSizing: 'border-box' }} />
-                            </div>
-                            {(() => {
-                              const q = userSearch.toLowerCase();
-                              const filtered = allUsers.filter(u => !q || u.displayName.toLowerCase().includes(q) || u.username.toLowerCase().includes(q));
-                              if (filtered.length === 0) return <p style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin resultados.</p>;
-                              return filtered.map(u => {
-                                const isFriend = u.friendshipStatus === 'accepted';
-                                const isPending = u.friendshipStatus === 'pending';
-                                return (
-                                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid rgba(201,154,20,.07)' }}>
-                                    <UserAvatar user={{ displayName: u.displayName, avatarUrl: u.avatarUrl }} size={32} />
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: '.88rem', fontWeight: 500 }}>{u.displayName}</div>
-                                      <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>@{u.username}</div>
-                                    </div>
-                                    {isFriend ? (
-                                      <span style={{ fontSize: '.75rem', color: 'var(--paid)', background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', padding: '3px 8px', borderRadius: 6 }}>Amigo</span>
-                                    ) : isPending ? (
-                                      <span style={{ fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>{u.direction === 'sent' ? 'Pendiente' : 'Te pidió'}</span>
-                                    ) : (
-                                      <button onClick={async () => {
-                                        const res = await fetch('/api/friends', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.username }) });
-                                        if (res.ok) { showToast(`Solicitud enviada a ${u.displayName}.`, 'success'); fetchAllUsers(); fetchFriends(); }
-                                        else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Error.', 'danger'); }
-                                      }} style={{ background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                                        <i className="bi bi-person-plus" style={{ marginRight: 4 }} />Agregar
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                        )}
-                        {friendSearchError && <p style={{ color: 'var(--red)', fontSize: '.82rem', marginTop: 6 }}>{friendSearchError}</p>}
                       </div>
                       {pendingFriendsSoc.length > 0 && (
                         <div style={{ marginBottom: 16 }}>
@@ -2529,6 +2487,56 @@ export default function GastosPage() {
           </div>
         );
       })()}
+
+      {/* ══ MODAL: Buscar gente ══ */}
+      {showAllUsers && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowAllUsers(false)} style={{ zIndex: 600 }}>
+          <div className="modal-box" style={{ maxWidth: 420, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-people" style={{ marginRight: 8 }} />Buscar gente</span>
+              <button onClick={() => setShowAllUsers(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <input type="text" placeholder="Buscar por nombre o usuario..." value={userSearch} autoFocus
+                onChange={e => setUserSearch(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {(() => {
+                const q = userSearch.toLowerCase();
+                const filtered = allUsers.filter(u => !q || u.displayName.toLowerCase().includes(q) || u.username.toLowerCase().includes(q));
+                if (filtered.length === 0) return <p style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin resultados.</p>;
+                return filtered.map(u => {
+                  const isFriend = u.friendshipStatus === 'accepted';
+                  const isPending = u.friendshipStatus === 'pending';
+                  return (
+                    <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid rgba(201,154,20,.07)' }}>
+                      <UserAvatar user={{ displayName: u.displayName, avatarUrl: u.avatarUrl }} size={34} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '.88rem', fontWeight: 500 }}>{u.displayName}</div>
+                        <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>@{u.username}</div>
+                      </div>
+                      {isFriend ? (
+                        <span style={{ fontSize: '.75rem', color: 'var(--paid)', background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', padding: '3px 8px', borderRadius: 6 }}>Amigo</span>
+                      ) : isPending ? (
+                        <span style={{ fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>{u.direction === 'sent' ? 'Pendiente' : 'Te pidió'}</span>
+                      ) : (
+                        <button onClick={async () => {
+                          const res = await fetch('/api/friends', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.username }) });
+                          if (res.ok) { showToast(`Solicitud enviada a ${u.displayName}.`, 'success'); fetchAllUsers(); fetchFriends(); }
+                          else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Error.', 'danger'); }
+                        }} style={{ background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                          <i className="bi bi-person-plus" style={{ marginRight: 4 }} />Agregar
+                        </button>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ MODAL: Add person (Otro...) ══ */}
       {showAddPerson && (
