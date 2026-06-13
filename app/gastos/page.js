@@ -2516,6 +2516,7 @@ export default function GastosPage() {
       {/* ══ MODAL: Advanced expense builder ══ */}
       {showAdvanced && (() => {
         const availPeople = [
+          { key: 'me', name: user?.displayName ? `${user.displayName} (yo)` : 'Yo', userId: null, isMe: true },
           ...acceptedFriends.map(f => ({ key: `f_${f.userId}`, name: f.displayName, userId: f.userId })),
           ...contacts.map(c => ({ key: `c_${c}`, name: c, userId: null })),
         ];
@@ -2546,13 +2547,14 @@ export default function GastosPage() {
 
         const applyAdvanced = () => {
           if (!grandTotal) return showToast('Agrega al menos un ítem con costo.', 'danger');
-          const charges = summaryPeople.map(p => ({
+          const othersOnly = summaryPeople.filter(p => !p.isMe);
+          const charges = othersOnly.map(p => ({
             person: p.name,
             personUserId: p.userId || null,
             amount: Math.round(p.total * 100) / 100,
           }));
           setFormTotal(String(Math.round(grandTotal)));
-          setSelectedPeople(summaryPeople.map(p => ({ name: p.name, userId: p.userId })));
+          setSelectedPeople(othersOnly.map(p => ({ name: p.name, userId: p.userId })));
           setAdvancedCharges(charges);
           setShowAdvanced(false);
         };
@@ -2620,9 +2622,9 @@ export default function GastosPage() {
                   <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px' }}>
                     <div style={{ fontSize: '.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Resumen</div>
                     {summaryPeople.map(p => (
-                      <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', padding: '3px 0' }}>
-                        <span>{p.name}</span>
-                        <span style={{ fontWeight: 600 }}>${fmt(p.total)}</span>
+                      <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', padding: '3px 0', color: p.isMe ? 'var(--gold)' : 'inherit' }}>
+                        <span>{p.isMe ? '⭐ Yo' : p.name}</span>
+                        <span style={{ fontWeight: 600 }}>${fmt(p.total)}{p.isMe ? ' (mi parte)' : ''}</span>
                       </div>
                     ))}
                     <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: '.88rem', fontWeight: 700 }}>
