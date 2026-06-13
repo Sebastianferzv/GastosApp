@@ -97,6 +97,7 @@ export default function GastosPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedItems, setAdvancedItems] = useState([{ id: 1, name: '', cost: '', chargedTo: [] }]);
   const [advancedCharges, setAdvancedCharges] = useState(null);
+  const [tipApplied, setTipApplied] = useState(false);
 
   // Edit expense
   const [editingId, setEditingId] = useState(null);
@@ -489,6 +490,7 @@ export default function GastosPage() {
       setPanelOpen(false);
       setAdvancedCharges(null);
       setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]);
+      setTipApplied(false);
       await fetchExpenses();
       showToast(`Gasto "${name}" creado.`, 'success');
     } else {
@@ -2530,9 +2532,10 @@ export default function GastosPage() {
         }));
 
         // Calculate per-person totals for summary
+        const tipMultiplier = tipApplied ? 1.10 : 1.0;
         const personTotals = {};
         for (const item of advancedItems) {
-          const cost = parseFloat(item.cost);
+          const cost = parseFloat(item.cost) * tipMultiplier;
           if (!cost || !item.chargedTo.length) continue;
           const share = cost / item.chargedTo.length;
           for (const key of item.chargedTo) {
@@ -2542,7 +2545,7 @@ export default function GastosPage() {
             personTotals[key].total += share;
           }
         }
-        const grandTotal = advancedItems.reduce((s, i) => s + (parseFloat(i.cost) || 0), 0);
+        const grandTotal = advancedItems.reduce((s, i) => s + (parseFloat(i.cost) || 0), 0) * tipMultiplier;
         const summaryPeople = Object.values(personTotals);
 
         const applyAdvanced = () => {
@@ -2613,8 +2616,14 @@ export default function GastosPage() {
                 ))}
 
                 <button onClick={addItem}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'rgba(201,154,20,.06)', border: '1px dashed rgba(201,154,20,.25)', color: 'var(--gold2)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 16 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'rgba(201,154,20,.06)', border: '1px dashed rgba(201,154,20,.25)', color: 'var(--gold2)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 8 }}>
                   <i className="bi bi-plus-circle" /> Agregar ítem
+                </button>
+
+                <button onClick={() => setTipApplied(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: tipApplied ? 'rgba(52,211,153,.1)' : 'rgba(255,255,255,.04)', border: tipApplied ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)', color: tipApplied ? 'var(--paid)' : 'var(--text-muted)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 16, transition: 'all .15s' }}>
+                  <span><i className="bi bi-stars" style={{ marginRight: 6 }} />{tipApplied ? 'Propina incluida (+10%)' : 'Agregar propina (+10%)'}</span>
+                  {tipApplied && <span style={{ fontSize: '.75rem', fontWeight: 600 }}>+${fmt(grandTotal / tipMultiplier * 0.1)}</span>}
                 </button>
 
                 {/* Summary */}
