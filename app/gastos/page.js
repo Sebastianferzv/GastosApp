@@ -138,6 +138,9 @@ export default function GastosPage() {
   const [groupMemberError, setGroupMemberError] = useState('');
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const msgEndRef = useRef(null);
+  const [allUsers, setAllUsers] = useState([]);
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
   const [revertTarget, setRevertTarget] = useState(null); // incoming item
   const [completingResumen, setCompletingResumen] = useState(new Set());
@@ -201,6 +204,11 @@ export default function GastosPage() {
   const fetchFriends = useCallback(async () => {
     const res = await fetch('/api/friends');
     if (res.ok) setFriends(await res.json());
+  }, []);
+
+  const fetchAllUsers = useCallback(async () => {
+    const res = await fetch('/api/users');
+    if (res.ok) setAllUsers(await res.json());
   }, []);
 
   const fetchGroups = useCallback(async () => {
@@ -2363,14 +2371,53 @@ export default function GastosPage() {
                           </button>
                         </div>
                       )}
+                      {/* Buscar gente */}
                       <div style={{ marginBottom: 20 }}>
-                        <label style={{ fontSize: '.78rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Agregar amigo</label>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input type="text" placeholder="Nombre de usuario..." value={friendSearch}
-                            onChange={e => { setFriendSearch(e.target.value); setFriendSearchError(''); }}
-                            onKeyDown={e => e.key === 'Enter' && sendFriendRequest()} />
-                          <button className="btn-primary" onClick={sendFriendRequest} style={{ whiteSpace: 'nowrap' }}><i className="bi bi-plus-lg" /></button>
-                        </div>
+                        <button onClick={() => { setShowAllUsers(v => !v); if (!showAllUsers) { fetchAllUsers(); setUserSearch(''); } }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'rgba(201,154,20,.08)', border: '1px solid rgba(201,154,20,.2)', color: 'var(--gold2)', padding: '10px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.88rem', fontFamily: 'inherit' }}>
+                          <i className={`bi ${showAllUsers ? 'bi-chevron-up' : 'bi-people'}`} />
+                          {showAllUsers ? 'Cerrar búsqueda' : 'Buscar gente'}
+                        </button>
+                        {showAllUsers && (
+                          <div style={{ marginTop: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                            <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
+                              <input type="text" placeholder="Buscar por nombre o usuario..." value={userSearch}
+                                onChange={e => setUserSearch(e.target.value)}
+                                style={{ width: '100%', fontSize: '.85rem', boxSizing: 'border-box' }} />
+                            </div>
+                            {(() => {
+                              const q = userSearch.toLowerCase();
+                              const filtered = allUsers.filter(u => !q || u.displayName.toLowerCase().includes(q) || u.username.toLowerCase().includes(q));
+                              if (filtered.length === 0) return <p style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin resultados.</p>;
+                              return filtered.map(u => {
+                                const isFriend = u.friendshipStatus === 'accepted';
+                                const isPending = u.friendshipStatus === 'pending';
+                                return (
+                                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid rgba(201,154,20,.07)' }}>
+                                    <UserAvatar user={{ displayName: u.displayName, avatarUrl: u.avatarUrl }} size={32} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '.88rem', fontWeight: 500 }}>{u.displayName}</div>
+                                      <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>@{u.username}</div>
+                                    </div>
+                                    {isFriend ? (
+                                      <span style={{ fontSize: '.75rem', color: 'var(--paid)', background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', padding: '3px 8px', borderRadius: 6 }}>Amigo</span>
+                                    ) : isPending ? (
+                                      <span style={{ fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>{u.direction === 'sent' ? 'Pendiente' : 'Te pidió'}</span>
+                                    ) : (
+                                      <button onClick={async () => {
+                                        const res = await fetch('/api/friends', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.username }) });
+                                        if (res.ok) { showToast(`Solicitud enviada a ${u.displayName}.`, 'success'); fetchAllUsers(); fetchFriends(); }
+                                        else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Error.', 'danger'); }
+                                      }} style={{ background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                                        <i className="bi bi-person-plus" style={{ marginRight: 4 }} />Agregar
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        )}
                         {friendSearchError && <p style={{ color: 'var(--red)', fontSize: '.82rem', marginTop: 6 }}>{friendSearchError}</p>}
                       </div>
                       {pendingFriendsSoc.length > 0 && (
