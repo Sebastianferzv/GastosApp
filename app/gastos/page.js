@@ -93,6 +93,10 @@ export default function GastosPage() {
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const peopleWrapRef = useRef(null);
+  // Advanced expense builder
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advancedItems, setAdvancedItems] = useState([{ id: 1, name: '', cost: '', chargedTo: [] }]);
+  const [advancedCharges, setAdvancedCharges] = useState(null);
 
   // Edit expense
   const [editingId, setEditingId] = useState(null);
@@ -452,7 +456,11 @@ export default function GastosPage() {
     if (!total || total <= 0) return showToast('El monto debe ser mayor a 0.', 'danger');
 
     let myShare, charges;
-    if (!selectedPeople.length) {
+    if (advancedCharges) {
+      const chargesTotal = advancedCharges.reduce((s, c) => s + c.amount, 0);
+      myShare = Math.round((total - chargesTotal) * 100) / 100;
+      charges = advancedCharges;
+    } else if (!selectedPeople.length) {
       myShare = total;
       charges = [];
     } else {
@@ -479,6 +487,8 @@ export default function GastosPage() {
       setFormDate(todayISO());
       setSelectedPeople([]);
       setPanelOpen(false);
+      setAdvancedCharges(null);
+      setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]);
       await fetchExpenses();
       showToast(`Gasto "${name}" creado.`, 'success');
     } else {
@@ -1598,6 +1608,21 @@ export default function GastosPage() {
                 </button>
               </div>
 
+              {/* Ver más / advanced builder */}
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={() => setShowAdvanced(true)}
+                  style={{ background: 'none', border: 'none', color: advancedCharges ? 'var(--gold)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <i className="bi bi-sliders" />
+                  {advancedCharges ? 'Configuración avanzada aplicada ✓' : 'Ver más...'}
+                </button>
+                {advancedCharges && (
+                  <button onClick={() => { setAdvancedCharges(null); setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]); setSelectedPeople([]); setFormTotal(''); }}
+                    style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', padding: 0, opacity: .7 }}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+
               {/* Chips */}
               {selectedPeople.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
@@ -2484,6 +2509,142 @@ export default function GastosPage() {
                 </div>
               </>
             )}
+          </div>
+        );
+      })()}
+
+      {/* ══ MODAL: Advanced expense builder ══ */}
+      {showAdvanced && (() => {
+        const availPeople = [
+          ...acceptedFriends.map(f => ({ key: `f_${f.userId}`, name: f.displayName, userId: f.userId })),
+          ...contacts.map(c => ({ key: `c_${c}`, name: c, userId: null })),
+        ];
+        const nextId = advancedItems.length ? Math.max(...advancedItems.map(i => i.id)) + 1 : 1;
+        const addItem = () => setAdvancedItems(prev => [...prev, { id: nextId, name: '', cost: '', chargedTo: [] }]);
+        const removeItem = id => setAdvancedItems(prev => prev.filter(i => i.id !== id));
+        const updateItem = (id, field, val) => setAdvancedItems(prev => prev.map(i => i.id === id ? { ...i, [field]: val } : i));
+        const togglePerson = (itemId, key) => setAdvancedItems(prev => prev.map(i => {
+          if (i.id !== itemId) return i;
+          return { ...i, chargedTo: i.chargedTo.includes(key) ? i.chargedTo.filter(k => k !== key) : [...i.chargedTo, key] };
+        }));
+
+        // Calculate per-person totals for summary
+        const personTotals = {};
+        for (const item of advancedItems) {
+          const cost = parseFloat(item.cost);
+          if (!cost || !item.chargedTo.length) continue;
+          const share = cost / item.chargedTo.length;
+          for (const key of item.chargedTo) {
+            const p = availPeople.find(p => p.key === key);
+            if (!p) continue;
+            if (!personTotals[key]) personTotals[key] = { ...p, total: 0 };
+            personTotals[key].total += share;
+          }
+        }
+        const grandTotal = advancedItems.reduce((s, i) => s + (parseFloat(i.cost) || 0), 0);
+        const summaryPeople = Object.values(personTotals);
+
+        const applyAdvanced = () => {
+          if (!grandTotal) return showToast('Agrega al menos un ítem con costo.', 'danger');
+          const charges = summaryPeople.map(p => ({
+            person: p.name,
+            personUserId: p.userId || null,
+            amount: Math.round(p.total * 100) / 100,
+          }));
+          setFormTotal(String(Math.round(grandTotal)));
+          setSelectedPeople(summaryPeople.map(p => ({ name: p.name, userId: p.userId })));
+          setAdvancedCharges(charges);
+          setShowAdvanced(false);
+        };
+
+        return (
+          <div className="overlay" onClick={e => e.target === e.currentTarget && setShowAdvanced(false)} style={{ zIndex: 600 }}>
+            <div className="modal-box" style={{ maxWidth: 480, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+              <div className="modal-header">
+                <span style={{ fontWeight: 600 }}><i className="bi bi-sliders" style={{ marginRight: 8 }} />Configuración avanzada</span>
+                <button onClick={() => setShowAdvanced(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+              </div>
+              <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+                {advancedItems.map((item, idx) => (
+                  <div key={item.id} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <input type="text" placeholder="Nombre del ítem..." value={item.name}
+                        onChange={e => updateItem(item.id, 'name', e.target.value)}
+                        style={{ flex: 1, fontSize: '.88rem' }} />
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <span style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '7px 0 0 7px', padding: '7px 8px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                        <input type="number" placeholder="0" value={item.cost} min="0" step="1"
+                          onChange={e => updateItem(item.id, 'cost', e.target.value)}
+                          style={{ width: 90, borderRadius: '0 7px 7px 0', borderLeft: 'none', fontSize: '.88rem' }} />
+                      </div>
+                      {advancedItems.length > 1 && (
+                        <button onClick={() => removeItem(item.id)}
+                          style={{ background: 'none', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '6px 9px', borderRadius: 8, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit' }}>
+                          <i className="bi bi-trash" />
+                        </button>
+                      )}
+                    </div>
+                    {availPeople.length === 0 ? (
+                      <p style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>Sin amigos ni contactos. Agrega desde la pestaña Amigos.</p>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Cobrar a</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {availPeople.map(p => {
+                            const sel = item.chargedTo.includes(p.key);
+                            return (
+                              <button key={p.key} onClick={() => togglePerson(item.id, p.key)}
+                                style={{ padding: '4px 11px', borderRadius: 99, border: sel ? '1px solid rgba(201,154,20,.5)' : '1px solid rgba(255,255,255,.1)', background: sel ? 'rgba(201,154,20,.18)' : 'transparent', color: sel ? 'var(--gold2)' : 'var(--text-muted)', fontSize: '.8rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 600 : 400, transition: 'all .12s' }}>
+                                {p.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {item.chargedTo.length > 1 && item.cost && (
+                          <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                            ${fmt(parseFloat(item.cost) / item.chargedTo.length)} cada uno
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <button onClick={addItem}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'rgba(201,154,20,.06)', border: '1px dashed rgba(201,154,20,.25)', color: 'var(--gold2)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 16 }}>
+                  <i className="bi bi-plus-circle" /> Agregar ítem
+                </button>
+
+                {/* Summary */}
+                {summaryPeople.length > 0 && (
+                  <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ fontSize: '.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Resumen</div>
+                    {summaryPeople.map(p => (
+                      <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', padding: '3px 0' }}>
+                        <span>{p.name}</span>
+                        <span style={{ fontWeight: 600 }}>${fmt(p.total)}</span>
+                      </div>
+                    ))}
+                    <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: '.88rem', fontWeight: 700 }}>
+                      <span>Total gasto</span>
+                      <span style={{ color: 'var(--gold2)' }}>${fmt(grandTotal)}</span>
+                    </div>
+                    <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                      Tu parte: ${fmt(grandTotal - summaryPeople.reduce((s, p) => s + p.total, 0))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, flexShrink: 0 }}>
+                <button onClick={() => setShowAdvanced(false)}
+                  style={{ flex: 1, background: 'none', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: '.9rem' }}>
+                  Cancelar
+                </button>
+                <button onClick={applyAdvanced} className="btn-primary" style={{ flex: 2, padding: '10px' }}>
+                  Aplicar
+                </button>
+              </div>
+            </div>
           </div>
         );
       })()}
