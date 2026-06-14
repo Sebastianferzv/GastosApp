@@ -1656,7 +1656,7 @@ export default function GastosPage() {
               {/* Cobrar 100% */}
               {selectedPeople.length === 1 && (
                 <button className="btn-primary ef-boton" onClick={() => createExpense(true)}
-                  style={{ marginTop: 8, width: '100%', padding: '9px 0', justifyContent: 'center', gap: 6 }}>
+                  style={{ marginTop: 8, padding: '9px 20px', gap: 6 }}>
                   <i className="bi bi-currency-dollar" />
                   Cobrar 100%
                 </button>
