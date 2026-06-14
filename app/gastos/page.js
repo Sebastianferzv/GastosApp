@@ -452,7 +452,7 @@ export default function GastosPage() {
   }
 
   // ── Create expense ───────────────────────────────────────────────────────────
-  async function createExpense() {
+  async function createExpense(forceChargeAll = false) {
     const name = formName.trim();
     const total = parseFloat(formTotal);
     const date = formDate || todayISO();
@@ -468,6 +468,9 @@ export default function GastosPage() {
     } else if (!selectedPeople.length) {
       myShare = total;
       charges = [];
+    } else if (forceChargeAll && selectedPeople.length === 1) {
+      myShare = 0;
+      charges = [{ person: selectedPeople[0].name, personUserId: selectedPeople[0].userId || null, amount: total }];
     } else {
       const n = selectedPeople.length + 1;
       const base = Math.round(total / n * 100) / 100;
@@ -1139,7 +1142,6 @@ export default function GastosPage() {
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const filteredExpenses = expenses.filter(e => {
-    if ((e.month || e.date?.slice(0, 7)) !== selectedMonth) return false;
     if (filterPending) {
       const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
       if (allPaid && !completingExpenses.current.has(e.id)) return false;
@@ -1646,9 +1648,22 @@ export default function GastosPage() {
                 </div>
 
                 {/* Botón agregar */}
-                <button className="btn-primary ef-boton" onClick={createExpense} style={{ padding: '9px 36px' }}>
+                <button className="btn-primary ef-boton" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
+                {selectedPeople.length === 1 && (
+                  <button className="ef-boton" onClick={() => createExpense(true)}
+                    style={{
+                      padding: '9px 16px', background: 'var(--grad)', border: 'none',
+                      borderRadius: 12, color: '#0e0b00', fontWeight: 700, fontSize: '.8rem',
+                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      boxShadow: '0 2px 12px rgba(201,154,20,.35)',
+                    }}>
+                    <i className="bi bi-currency-dollar" />
+                    Cobrar 100%
+                  </button>
+                )}
               </div>
 
               {/* Ver más / advanced builder */}
@@ -1694,45 +1709,20 @@ export default function GastosPage() {
               )}
             </div>
 
-            {/* Month selector + filter */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-                  {[...months].reverse().map(m => (
-                    <button key={m} onClick={() => setSelectedMonth(m)}
-                      style={{
-                        padding: '5px 14px', borderRadius: 99, border: '1px solid rgba(201,154,20,.22)',
-                        background: m === selectedMonth ? 'var(--grad)' : 'rgba(201,154,20,.07)',
-                        color: m === selectedMonth ? '#0e0b00' : 'var(--text-muted)',
-                        fontSize: '.78rem', fontWeight: m === selectedMonth ? 700 : 500,
-                        cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
-                        boxShadow: m === selectedMonth ? '0 2px 12px rgba(201,154,20,.35)' : 'none',
-                      }}>
-                      {fmtMonth(m)}
-                    </button>
-                  ))}
-                  <button onClick={() => { setAddMonthVal(''); setShowAddMonth(true); }}
-                    style={{
-                      padding: '5px 10px', borderRadius: 99, border: '1px solid rgba(201,154,20,.22)',
-                      background: 'rgba(201,154,20,.07)', color: 'var(--text-muted)',
-                      fontSize: '.85rem', cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4,
-                    }}>
-                    <i className="bi bi-plus-lg" />
-                  </button>
-                </div>
-                <button onClick={() => setFilterPending(p => !p)}
-                  style={{
-                    background: filterPending ? 'rgba(255,255,255,.04)' : 'rgba(201,154,20,.18)',
-                    border: filterPending ? '1px solid rgba(255,255,255,.12)' : '1px solid rgba(201,154,20,.5)',
-                    color: filterPending ? 'var(--text-muted)' : 'var(--gold2)',
-                    cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
-                    fontSize: '.8rem', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'inherit',
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                  }}>
-                  <i className={`bi ${filterPending ? 'bi-eye' : 'bi-eye-slash'}`} />
-                  {filterPending ? 'Ver todo' : 'Solo pendientes'}
-                </button>
-              </div>
+            {/* Filter */}
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setFilterPending(p => !p)}
+                style={{
+                  background: filterPending ? 'rgba(255,255,255,.04)' : 'rgba(201,154,20,.18)',
+                  border: filterPending ? '1px solid rgba(255,255,255,.12)' : '1px solid rgba(201,154,20,.5)',
+                  color: filterPending ? 'var(--text-muted)' : 'var(--gold2)',
+                  cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
+                  fontSize: '.8rem', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}>
+                <i className={`bi ${filterPending ? 'bi-eye' : 'bi-eye-slash'}`} />
+                {filterPending ? 'Ver todo' : 'Solo pendientes'}
+              </button>
             </div>
 
             {/* Expense list */}
@@ -1740,9 +1730,7 @@ export default function GastosPage() {
               <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
                 <i className="bi bi-receipt" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
                 <p style={{ marginTop: 12, fontSize: '.9rem' }}>
-                  {filterPending
-                    ? `Sin gastos pendientes en ${fmtMonth(selectedMonth)}`
-                    : `Sin gastos en ${fmtMonth(selectedMonth)}`}
+                  {filterPending ? 'Sin gastos pendientes' : 'Sin gastos registrados'}
                 </p>
               </div>
             ) : (
