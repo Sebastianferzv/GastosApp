@@ -1651,20 +1651,16 @@ export default function GastosPage() {
                 <button className="btn-primary ef-boton" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
                   <i className="bi bi-plus-lg" />
                 </button>
-                {selectedPeople.length === 1 && (
-                  <button className="ef-boton" onClick={() => createExpense(true)}
-                    style={{
-                      padding: '9px 16px', background: 'var(--grad)', border: 'none',
-                      borderRadius: 12, color: '#0e0b00', fontWeight: 700, fontSize: '.8rem',
-                      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      boxShadow: '0 2px 12px rgba(201,154,20,.35)',
-                    }}>
-                    <i className="bi bi-currency-dollar" />
-                    Cobrar 100%
-                  </button>
-                )}
               </div>
+
+              {/* Cobrar 100% */}
+              {selectedPeople.length === 1 && (
+                <button className="btn-primary ef-boton" onClick={() => createExpense(true)}
+                  style={{ marginTop: 8, width: '100%', padding: '9px 0', justifyContent: 'center', gap: 6 }}>
+                  <i className="bi bi-currency-dollar" />
+                  Cobrar 100%
+                </button>
+              )}
 
               {/* Ver más / advanced builder */}
               <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
