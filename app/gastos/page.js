@@ -1647,20 +1647,19 @@ export default function GastosPage() {
                   <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
                 </div>
 
-                {/* Botón agregar */}
-                <button className="btn-primary ef-boton" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
-                  <i className="bi bi-plus-lg" />
-                </button>
+                {/* Botones */}
+                <div className="ef-boton" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                  <button className="btn-primary" onClick={() => createExpense(false)} style={{ padding: '9px 20px', width: '100%' }}>
+                    <i className="bi bi-plus-lg" />
+                  </button>
+                  {selectedPeople.length === 1 && (
+                    <button className="btn-primary" onClick={() => createExpense(true)}
+                      style={{ padding: '7px 10px', width: '100%', fontSize: '.75rem', fontWeight: 700 }}>
+                      Cobrar 100%
+                    </button>
+                  )}
+                </div>
               </div>
-
-              {/* Cobrar 100% */}
-              {selectedPeople.length === 1 && (
-                <button className="btn-primary ef-boton" onClick={() => createExpense(true)}
-                  style={{ marginTop: 8, padding: '9px 20px', gap: 6 }}>
-                  <i className="bi bi-currency-dollar" />
-                  Cobrar 100%
-                </button>
-              )}
 
               {/* Ver más / advanced builder */}
               <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
