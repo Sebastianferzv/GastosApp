@@ -113,6 +113,7 @@ export default function GastosPage() {
   const [lockedKeys, setLockedKeys] = useState(new Set());
   const [editPeople, setEditPeople] = useState([]);
   const [showEditPeoplePicker, setShowEditPeoplePicker] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Completing animations
   const completingExpenses = useRef(new Set());
@@ -636,6 +637,7 @@ export default function GastosPage() {
     setEditingId(null);
     setEditPeople([]);
     setShowEditPeoplePicker(false);
+    setConfirmReset(false);
     setEditAmounts({});
     setEditPercents({});
     setEditBaseAmts({});
@@ -1876,9 +1878,9 @@ export default function GastosPage() {
                               ))}
                             </div>
                             {renderEditTabContent(e)}
-                            <button onClick={() => resetEqualSplit(editPeople, editTotal)}
-                              style={{ marginTop: 10, width: '100%', background: 'none', border: '1px solid rgba(255,255,255,.1)', color: 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                              <i className="bi bi-arrow-repeat" />Restablecer
+                            <button onClick={() => { if (confirmReset) { resetEqualSplit(editPeople, editTotal); setConfirmReset(false); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }}
+                              style={{ marginTop: 10, width: '100%', background: confirmReset ? 'rgba(248,113,113,.1)' : 'none', border: `1px solid ${confirmReset ? 'rgba(248,113,113,.3)' : 'rgba(255,255,255,.1)'}`, color: confirmReset ? 'var(--red)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
+                              <i className={`bi ${confirmReset ? 'bi-exclamation-triangle' : 'bi-arrow-repeat'}`} />{confirmReset ? '¿Seguro?' : 'Restablecer'}
                             </button>
                           </div>
 
