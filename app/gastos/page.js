@@ -1511,13 +1511,11 @@ export default function GastosPage() {
               )}
             </button>
           ))}
-          {isIOS && (
-            <button onClick={async () => { await Promise.all([fetchExpenses(), fetchIncoming(), fetchFriends(), fetchNotifications()]); showToast('Actualizado.', 'success'); }}
-              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '6px 4px', marginBottom: -1, fontSize: '1.05rem' }}
-              title="Actualizar">
-              <i className="bi bi-arrow-clockwise" />
-            </button>
-          )}
+          <button onClick={async () => { await Promise.all([fetchExpenses(), fetchIncoming(), fetchFriends(), fetchNotifications()]); showToast('Actualizado.', 'success'); }}
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '6px 4px', marginBottom: -1, fontSize: '1.05rem' }}
+            title="Actualizar">
+            <i className="bi bi-arrow-clockwise" />
+          </button>
         </div>
 
         {/* ══ TAB: Mis gastos ══ */}
