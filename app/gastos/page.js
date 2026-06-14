@@ -112,6 +112,7 @@ export default function GastosPage() {
   const [editTipPct, setEditTipPct] = useState(10);
   const [lockedKeys, setLockedKeys] = useState(new Set());
   const [editPeople, setEditPeople] = useState([]);
+  const [showEditPeoplePicker, setShowEditPeoplePicker] = useState(false);
 
   // Completing animations
   const completingExpenses = useRef(new Set());
@@ -634,6 +635,7 @@ export default function GastosPage() {
   function cancelEdit() {
     setEditingId(null);
     setEditPeople([]);
+    setShowEditPeoplePicker(false);
     setEditAmounts({});
     setEditPercents({});
     setEditBaseAmts({});
@@ -1823,14 +1825,8 @@ export default function GastosPage() {
                             ];
                             return (
                               <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 12 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                  <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Personas</div>
-                                  <button onClick={() => resetEqualSplit(editPeople, editTotal)}
-                                    style={{ background: 'none', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold)', padding: '3px 9px', borderRadius: 6, cursor: 'pointer', fontSize: '.72rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <i className="bi bi-arrow-repeat" />Repartir equitativamente
-                                  </button>
-                                </div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: addablePeople.length ? 8 : 0 }}>
+                                <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Personas</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold2)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
                                     <i className="bi bi-person-fill" style={{ fontSize: '.75rem', opacity: .6 }} />Tú
                                   </span>
@@ -1841,13 +1837,19 @@ export default function GastosPage() {
                                         style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: '.95rem', opacity: .7 }}>×</button>
                                     </span>
                                   ))}
+                                  {addablePeople.length > 0 && (
+                                    <button onClick={() => setShowEditPeoplePicker(v => !v)}
+                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px dashed rgba(255,255,255,.2)', color: 'var(--text-muted)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
+                                      <i className="bi bi-plus" />Agregar
+                                    </button>
+                                  )}
                                 </div>
-                                {addablePeople.length > 0 && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                {showEditPeoplePicker && addablePeople.length > 0 && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 4 }}>
                                     {addablePeople.map(p => (
-                                      <button key={p.userId ?? p.name} onClick={() => addPersonToEdit(p)}
-                                        style={{ background: 'transparent', border: '1px dashed rgba(255,255,255,.18)', color: 'var(--text-muted)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <i className="bi bi-plus" style={{ fontSize: '.8rem' }} />{p.name}
+                                      <button key={p.userId ?? p.name} onClick={() => { addPersonToEdit(p); setShowEditPeoplePicker(false); }}
+                                        style={{ background: 'rgba(201,154,20,.08)', border: '1px solid rgba(201,154,20,.2)', color: 'var(--gold2)', borderRadius: 99, padding: '4px 12px', cursor: 'pointer', fontSize: '.82rem', fontFamily: 'inherit' }}>
+                                        {p.name}
                                       </button>
                                     ))}
                                   </div>
@@ -1874,6 +1876,10 @@ export default function GastosPage() {
                               ))}
                             </div>
                             {renderEditTabContent(e)}
+                            <button onClick={() => resetEqualSplit(editPeople, editTotal)}
+                              style={{ marginTop: 10, width: '100%', background: 'none', border: '1px solid rgba(255,255,255,.1)', color: 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                              <i className="bi bi-arrow-repeat" />Restablecer
+                            </button>
                           </div>
 
                           {/* Save / Cancel */}
