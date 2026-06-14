@@ -1879,8 +1879,8 @@ export default function GastosPage() {
                             </div>
                             {renderEditTabContent(e)}
                             <button onClick={() => { if (confirmReset) { resetEqualSplit(editPeople, editTotal); setConfirmReset(false); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }}
-                              style={{ marginTop: 10, width: '100%', background: confirmReset ? 'rgba(248,113,113,.1)' : 'none', border: `1px solid ${confirmReset ? 'rgba(248,113,113,.3)' : 'rgba(255,255,255,.1)'}`, color: confirmReset ? 'var(--red)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
-                              <i className={`bi ${confirmReset ? 'bi-exclamation-triangle' : 'bi-arrow-repeat'}`} />{confirmReset ? '¿Seguro?' : 'Restablecer'}
+                              style={{ marginTop: 10, width: '100%', background: confirmReset ? 'rgba(248,113,113,.06)' : 'none', border: `1px solid ${confirmReset ? 'rgba(248,113,113,.15)' : 'rgba(255,255,255,.1)'}`, color: confirmReset ? 'rgba(248,113,113,.7)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
+                              <i className="bi bi-arrow-repeat" />{confirmReset ? '¿Seguro?' : 'Restablecer'}
                             </button>
                           </div>
 
