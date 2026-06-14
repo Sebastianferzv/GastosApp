@@ -2650,9 +2650,9 @@ export default function GastosPage() {
         };
 
         const tabs = [
-          { key: 'items', label: 'Por ítem', icon: 'bi-list-ul' },
+          { key: 'items', label: 'Por ítem', icon: 'bi-list-ul', desc: 'Enlista los ítems del gasto y elige a quién cobrarle por cada uno.' },
         ];
-        const tabStyle = active => ({ flex: 1, padding: '10px 0', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.83rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' });
+        const tabStyle = active => ({ padding: '9px 16px', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.83rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, transition: 'all .15s', whiteSpace: 'nowrap' });
 
         return (
           <div className="overlay" onClick={e => e.target === e.currentTarget && setShowAdvanced(false)} style={{ zIndex: 600 }}>
@@ -2663,13 +2663,21 @@ export default function GastosPage() {
               </div>
 
               {/* Tab bar */}
-              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
-                {tabs.map(t => (
-                  <button key={t.key} style={tabStyle(advancedTab === t.key)} onClick={() => setAdvancedTab(t.key)}>
-                    <i className={`bi ${t.icon}`} />{t.label}
-                  </button>
-                ))}
+              <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
+                <div style={{ display: 'flex', paddingLeft: 4 }}>
+                  {tabs.map(t => (
+                    <button key={t.key} style={tabStyle(advancedTab === t.key)} onClick={() => setAdvancedTab(t.key)}>
+                      <i className={`bi ${t.icon}`} />{t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {/* Tab description */}
+              {(() => { const t = tabs.find(t => t.key === advancedTab); return t?.desc ? (
+                <div style={{ padding: '8px 16px', fontSize: '.75rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', background: 'rgba(201,154,20,.03)', flexShrink: 0 }}>
+                  {t.desc}
+                </div>
+              ) : null; })()}
 
               <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
                 {advancedTab === 'items' && advancedItems.map((item, idx) => (
