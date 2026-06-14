@@ -111,6 +111,7 @@ export default function GastosPage() {
   const [editPreAmts, setEditPreAmts] = useState({});
   const [editTipPct, setEditTipPct] = useState(10);
   const [lockedKeys, setLockedKeys] = useState(new Set());
+  const [editPeople, setEditPeople] = useState([]);
 
   // Completing animations
   const completingExpenses = useRef(new Set());
@@ -588,11 +589,17 @@ export default function GastosPage() {
 
   // ── Edit expense ─────────────────────────────────────────────────────────────
   function startEdit(expense) {
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const initPeople = expense.charges.map((c, i) => ({
+      key: `p_${i}`,
+      person: c.person,
+      personUserId: c.personUserId || null,
+      paid: c.paid || false,
+    }));
+    const allKeys = ['tu', ...initPeople.map(p => p.key)];
     const n = allKeys.length;
 
     const amts = { tu: expense.myShare ?? 0 };
-    expense.charges.forEach(c => { amts[String(c.id)] = c.amount; });
+    initPeople.forEach((p, i) => { amts[p.key] = expense.charges[i].amount; });
 
     const pcts = {};
     allKeys.forEach(k => {
@@ -610,6 +617,7 @@ export default function GastosPage() {
     const preAmts = {};
     allKeys.forEach(k => { preAmts[k] = amts[k] || 0; });
 
+    setEditPeople(initPeople);
     setEditingId(expense.id);
     setEditName(expense.name);
     setEditDate(expense.date || todayISO());
@@ -625,6 +633,7 @@ export default function GastosPage() {
 
   function cancelEdit() {
     setEditingId(null);
+    setEditPeople([]);
     setEditAmounts({});
     setEditPercents({});
     setEditBaseAmts({});
@@ -634,10 +643,35 @@ export default function GastosPage() {
     setEditingTab('monto');
   }
 
+  function resetEqualSplit(people, total) {
+    const n = people.length + 1;
+    const base = Math.round(total / n * 100) / 100;
+    const rem = Math.round((total - base * n) * 100) / 100;
+    const allKeys = ['tu', ...people.map(p => p.key)];
+    const newAmts = {};
+    allKeys.forEach((k, i) => { newAmts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    setEditAmounts(newAmts);
+    setLockedKeys(new Set());
+    setEditingTab('monto');
+  }
+
+  function addPersonToEdit(person) {
+    const newKey = `p_${Date.now()}`;
+    const newPeople = [...editPeople, { key: newKey, person: person.name, personUserId: person.userId || null, paid: false }];
+    setEditPeople(newPeople);
+    resetEqualSplit(newPeople, editTotal);
+  }
+
+  function removePersonFromEdit(key) {
+    const newPeople = editPeople.filter(p => p.key !== key);
+    setEditPeople(newPeople);
+    resetEqualSplit(newPeople, editTotal);
+  }
+
   async function saveEdit(expense) {
     const name = editName.trim();
     if (!name) return showToast('El nombre no puede estar vacío.', 'danger');
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const newTotal = editTotal || expense.total;
     let newMyShare, newCharges;
 
@@ -645,17 +679,18 @@ export default function GastosPage() {
       const sumEdit = allKeys.reduce((s, k) => s + (editAmounts[k] || 0), 0);
       if (Math.abs(sumEdit - newTotal) > 0.05) return showToast('La distribución no suma el total.', 'danger');
       newMyShare = editAmounts['tu'] || 0;
-      newCharges = expense.charges.map(c => ({
-        ...c, amount: editAmounts[String(c.id)] || 0,
+      newCharges = editPeople.map(p => ({
+        person: p.person, personUserId: p.personUserId, paid: p.paid,
+        amount: editAmounts[p.key] || 0,
       }));
     } else if (editingTab === 'porcentaje') {
       const sumPct = allKeys.reduce((s, k) => s + (editPercents[k] || 0), 0);
       if (Math.abs(sumPct - 100) > 0.6) return showToast('Los porcentajes no suman 100%.', 'danger');
       let chargeSum = 0;
-      newCharges = expense.charges.map(c => {
-        const amt = Math.round(newTotal * (editPercents[String(c.id)] || 0) / 100 * 100) / 100;
+      newCharges = editPeople.map(p => {
+        const amt = Math.round(newTotal * (editPercents[p.key] || 0) / 100 * 100) / 100;
         chargeSum += amt;
-        return { ...c, amount: amt };
+        return { person: p.person, personUserId: p.personUserId, paid: p.paid, amount: amt };
       });
       newMyShare = Math.round((newTotal - chargeSum) * 100) / 100;
     } else if (editingTab === 'propina') {
@@ -663,10 +698,10 @@ export default function GastosPage() {
       const sumBase = allKeys.reduce((s, k) => s + (editBaseAmts[k] || 0), 0);
       if (Math.abs(sumBase - base) > 1) return showToast('Las bases no suman el monto sin propina.', 'danger');
       let chargeSum = 0;
-      newCharges = expense.charges.map(c => {
-        const amt = Math.round((editBaseAmts[String(c.id)] || 0) * (1 + editTipPct / 100) * 100) / 100;
+      newCharges = editPeople.map(p => {
+        const amt = Math.round((editBaseAmts[p.key] || 0) * (1 + editTipPct / 100) * 100) / 100;
         chargeSum += amt;
-        return { ...c, amount: amt };
+        return { person: p.person, personUserId: p.personUserId, paid: p.paid, amount: amt };
       });
       newMyShare = Math.round((newTotal - chargeSum) * 100) / 100;
     } else if (editingTab === 'descuento') {
@@ -674,10 +709,10 @@ export default function GastosPage() {
       if (preTotal <= newTotal + 0.01) return showToast('La suma sin descuento debe ser mayor al total final.', 'danger');
       const discFactor = newTotal / preTotal;
       let chargeSum = 0;
-      newCharges = expense.charges.map(c => {
-        const amt = Math.round((editPreAmts[String(c.id)] || 0) * discFactor * 100) / 100;
+      newCharges = editPeople.map(p => {
+        const amt = Math.round((editPreAmts[p.key] || 0) * discFactor * 100) / 100;
         chargeSum += amt;
-        return { ...c, amount: amt };
+        return { person: p.person, personUserId: p.personUserId, paid: p.paid, amount: amt };
       });
       newMyShare = Math.round((newTotal - chargeSum) * 100) / 100;
     }
@@ -705,7 +740,7 @@ export default function GastosPage() {
   // ── Edit tab switch ──────────────────────────────────────────────────────────
   function switchEditTab(tab, expense) {
     if (tab === editingTab) return;
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const n = allKeys.length;
     const total = editTotal || expense.total;
 
@@ -737,7 +772,7 @@ export default function GastosPage() {
   function handleEditAmount(key, rawVal, expense) {
     const total = editTotal || expense.total;
     const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, total));
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const fixedSet = new Set([key, ...lockedKeys]);
     const toUpdate = allKeys.filter(k => !fixedSet.has(k));
     const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (editAmounts[k] || 0)), 0);
@@ -757,7 +792,7 @@ export default function GastosPage() {
   // ── Edit percent change ──────────────────────────────────────────────────────
   function handleEditPercent(key, rawVal, expense) {
     const val = Math.max(0, Math.min(100, parseFloat(rawVal) || 0));
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const fixedSet = new Set([key, ...lockedKeys]);
     const toUpdate = allKeys.filter(k => !fixedSet.has(k));
     const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (editPercents[k] || 0)), 0);
@@ -779,7 +814,7 @@ export default function GastosPage() {
     const total = editTotal || expense.total;
     const base = Math.round(total / (1 + editTipPct / 100) * 100) / 100;
     const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, base));
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const fixedSet = new Set([key, ...lockedKeys]);
     const toUpdate = allKeys.filter(k => !fixedSet.has(k));
     const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (editBaseAmts[k] || 0)), 0);
@@ -808,7 +843,7 @@ export default function GastosPage() {
     setEditTipPct(pct);
     const total = editTotal || expense.total;
     const base = Math.round(total / (1 + pct / 100) * 100) / 100;
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const n = allKeys.length;
     const bp = Math.round(base / n * 100) / 100;
     const br = Math.round((base - bp * n) * 100) / 100;
@@ -821,7 +856,7 @@ export default function GastosPage() {
   function handleEditTotalChange(rawVal, expense) {
     const val = Math.max(1, parseFloat(rawVal) || 0);
     setEditTotal(val);
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const n = allKeys.length;
     const bm = Math.round(val / n * 100) / 100;
     const rm = Math.round((val - bm * n) * 100) / 100;
@@ -1122,9 +1157,9 @@ export default function GastosPage() {
   // ── Render: Edit tab content ─────────────────────────────────────────────────
   function renderEditTabContent(expense) {
     const total = editTotal || expense.total;
-    const allKeys = ['tu', ...expense.charges.map(c => String(c.id))];
+    const allKeys = ['tu', ...editPeople.map(p => p.key)];
     const labels = { tu: 'Tú' };
-    expense.charges.forEach(c => { labels[String(c.id)] = c.person; });
+    editPeople.forEach(p => { labels[p.key] = p.person; });
 
     if (editingTab === 'monto') {
       const sumEdit = allKeys.reduce((s, k) => s + (editAmounts[k] || 0), 0);
@@ -1778,6 +1813,48 @@ export default function GastosPage() {
                               </div>
                             </div>
                           </div>
+
+                          {/* Personas */}
+                          {(() => {
+                            const memberKeys = new Set(editPeople.map(p => p.personUserId ? `f_${p.personUserId}` : `c_${p.person}`));
+                            const addablePeople = [
+                              ...acceptedFriends.filter(f => !memberKeys.has(`f_${f.userId}`)).map(f => ({ name: f.displayName, userId: f.userId })),
+                              ...contacts.filter(c => !memberKeys.has(`c_${c}`)).map(c => ({ name: c, userId: null })),
+                            ];
+                            return (
+                              <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                  <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Personas</div>
+                                  <button onClick={() => resetEqualSplit(editPeople, editTotal)}
+                                    style={{ background: 'none', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold)', padding: '3px 9px', borderRadius: 6, cursor: 'pointer', fontSize: '.72rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <i className="bi bi-arrow-repeat" />Repartir equitativamente
+                                  </button>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: addablePeople.length ? 8 : 0 }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold2)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
+                                    <i className="bi bi-person-fill" style={{ fontSize: '.75rem', opacity: .6 }} />Tú
+                                  </span>
+                                  {editPeople.map(p => (
+                                    <span key={p.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
+                                      {p.person}
+                                      <button onClick={() => removePersonFromEdit(p.key)}
+                                        style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: '.95rem', opacity: .7 }}>×</button>
+                                    </span>
+                                  ))}
+                                </div>
+                                {addablePeople.length > 0 && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                    {addablePeople.map(p => (
+                                      <button key={p.userId ?? p.name} onClick={() => addPersonToEdit(p)}
+                                        style={{ background: 'transparent', border: '1px dashed rgba(255,255,255,.18)', color: 'var(--text-muted)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <i className="bi bi-plus" style={{ fontSize: '.8rem' }} />{p.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Distribution tabs */}
                           <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 8 }}>
