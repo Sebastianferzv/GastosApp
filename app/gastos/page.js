@@ -2859,37 +2859,13 @@ export default function GastosPage() {
               <div style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#a78bfa', marginBottom: 16 }}>Junio 2026</div>
 
               <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(96,165,250,.12)', border: '1px solid rgba(96,165,250,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <i className="bi bi-cash-coin" style={{ color: '#60a5fa', fontSize: '1.1rem' }} />
+                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(201,154,20,.12)', border: '1px solid rgba(201,154,20,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="bi bi-sliders" style={{ color: 'var(--gold2)', fontSize: '1.1rem' }} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Pagos parciales</div>
+                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Configuración avanzada al crear un gasto</div>
                   <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    Ahora puedes pagar una parte de lo que debes. En el Resumen, usa el botón <i className="bi bi-cash-coin" style={{ color: '#60a5fa' }} /> para elegir cuánto quieres pagar — el sistema distribuye el monto entre tus deudas más antiguas primero.
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <i className="bi bi-bar-chart-line" style={{ color: 'var(--paid)', fontSize: '1.1rem' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Vista actualizada</div>
-                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    En <strong style={{ color: 'var(--text)' }}>Resumen</strong>, <strong style={{ color: 'var(--text)' }}>Me cobran</strong> y <strong style={{ color: 'var(--text)' }}>Mis gastos</strong> verás separada la parte ya pagada (verde) de la parte pendiente, para cada cobro con pago parcial.
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(251,191,36,.1)', border: '1px solid rgba(251,191,36,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <i className="bi bi-bell" style={{ color: '#fbbf24', fontSize: '1.1rem' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Confirmación del dueño</div>
-                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                    El pago parcial llega como notificación al dueño del gasto. Solo se aplica cuando él lo acepta.
+                    Al crear un gasto, toca <strong style={{ color: 'var(--text)' }}>"Ver más..."</strong> para acceder a la configuración avanzada. Desde ahí puedes desglosar por ítems, asignar cada uno a personas específicas, incluirte a ti mismo y agregar propina (+10%). Al aplicar, el gasto se crea con los montos exactos por persona.
                   </div>
                 </div>
               </div>
