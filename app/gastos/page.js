@@ -98,6 +98,7 @@ export default function GastosPage() {
   const [advancedItems, setAdvancedItems] = useState([{ id: 1, name: '', cost: '', chargedTo: [] }]);
   const [advancedCharges, setAdvancedCharges] = useState(null);
   const [tipApplied, setTipApplied] = useState(false);
+  const [advancedTab, setAdvancedTab] = useState('items');
 
   // Edit expense
   const [editingId, setEditingId] = useState(null);
@@ -494,6 +495,7 @@ export default function GastosPage() {
       setAdvancedCharges(null);
       setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]);
       setTipApplied(false);
+      setAdvancedTab('items');
       await fetchExpenses();
       showToast(`Gasto "${name}" creado.`, 'success');
     } else {
@@ -2647,6 +2649,11 @@ export default function GastosPage() {
           setShowAdvanced(false);
         };
 
+        const tabs = [
+          { key: 'items', label: 'Por ítem', icon: 'bi-list-ul' },
+        ];
+        const tabStyle = active => ({ flex: 1, padding: '10px 0', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.83rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' });
+
         return (
           <div className="overlay" onClick={e => e.target === e.currentTarget && setShowAdvanced(false)} style={{ zIndex: 600 }}>
             <div className="modal-box" style={{ maxWidth: 480, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
@@ -2654,8 +2661,18 @@ export default function GastosPage() {
                 <span style={{ fontWeight: 600 }}><i className="bi bi-sliders" style={{ marginRight: 8 }} />Configuración avanzada</span>
                 <button onClick={() => setShowAdvanced(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
               </div>
+
+              {/* Tab bar */}
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)' }}>
+                {tabs.map(t => (
+                  <button key={t.key} style={tabStyle(advancedTab === t.key)} onClick={() => setAdvancedTab(t.key)}>
+                    <i className={`bi ${t.icon}`} />{t.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
-                {advancedItems.map((item, idx) => (
+                {advancedTab === 'items' && advancedItems.map((item, idx) => (
                   <div key={item.id} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                       <input type="text" placeholder="Nombre del ítem..." value={item.name}
@@ -2700,36 +2717,37 @@ export default function GastosPage() {
                   </div>
                 ))}
 
-                <button onClick={addItem}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'rgba(201,154,20,.06)', border: '1px dashed rgba(201,154,20,.25)', color: 'var(--gold2)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 8 }}>
-                  <i className="bi bi-plus-circle" /> Agregar ítem
-                </button>
+                {advancedTab === 'items' && (<>
+                  <button onClick={addItem}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', background: 'rgba(201,154,20,.06)', border: '1px dashed rgba(201,154,20,.25)', color: 'var(--gold2)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 8 }}>
+                    <i className="bi bi-plus-circle" /> Agregar ítem
+                  </button>
 
-                <button onClick={() => setTipApplied(v => !v)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: tipApplied ? 'rgba(52,211,153,.1)' : 'rgba(255,255,255,.04)', border: tipApplied ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)', color: tipApplied ? 'var(--paid)' : 'var(--text-muted)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 16, transition: 'all .15s' }}>
-                  <span><i className="bi bi-stars" style={{ marginRight: 6 }} />{tipApplied ? 'Propina incluida (+10%)' : 'Agregar propina (+10%)'}</span>
-                  {tipApplied && <span style={{ fontSize: '.75rem', fontWeight: 600 }}>+${fmt(grandTotal / tipMultiplier * 0.1)}</span>}
-                </button>
+                  <button onClick={() => setTipApplied(v => !v)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', background: tipApplied ? 'rgba(52,211,153,.1)' : 'rgba(255,255,255,.04)', border: tipApplied ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)', color: tipApplied ? 'var(--paid)' : 'var(--text-muted)', padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontSize: '.85rem', fontFamily: 'inherit', marginBottom: 16, transition: 'all .15s' }}>
+                    <span><i className="bi bi-stars" style={{ marginRight: 6 }} />{tipApplied ? 'Propina incluida (+10%)' : 'Agregar propina (+10%)'}</span>
+                    {tipApplied && <span style={{ fontSize: '.75rem', fontWeight: 600 }}>+${fmt(grandTotal / tipMultiplier * 0.1)}</span>}
+                  </button>
 
-                {/* Summary */}
-                {summaryPeople.length > 0 && (
-                  <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: '.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Resumen</div>
-                    {summaryPeople.map(p => (
-                      <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', padding: '3px 0', color: p.isMe ? 'var(--gold)' : 'inherit' }}>
-                        <span>{p.isMe ? '⭐ Yo' : p.name}</span>
-                        <span style={{ fontWeight: 600 }}>${fmt(p.total)}{p.isMe ? ' (mi parte)' : ''}</span>
+                  {summaryPeople.length > 0 && (
+                    <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontSize: '.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Resumen</div>
+                      {summaryPeople.map(p => (
+                        <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', padding: '3px 0', color: p.isMe ? 'var(--gold)' : 'inherit' }}>
+                          <span>{p.isMe ? '⭐ Yo' : p.name}</span>
+                          <span style={{ fontWeight: 600 }}>${fmt(p.total)}{p.isMe ? ' (mi parte)' : ''}</span>
+                        </div>
+                      ))}
+                      <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: '.88rem', fontWeight: 700 }}>
+                        <span>Total gasto</span>
+                        <span style={{ color: 'var(--gold2)' }}>${fmt(grandTotal)}</span>
                       </div>
-                    ))}
-                    <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: '.88rem', fontWeight: 700 }}>
-                      <span>Total gasto</span>
-                      <span style={{ color: 'var(--gold2)' }}>${fmt(grandTotal)}</span>
+                      <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                        Tu parte: ${fmt(grandTotal - summaryPeople.reduce((s, p) => s + p.total, 0))}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                      Tu parte: ${fmt(grandTotal - summaryPeople.reduce((s, p) => s + p.total, 0))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </>)}
               </div>
               <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, flexShrink: 0 }}>
                 <button onClick={() => setShowAdvanced(false)}
