@@ -1649,7 +1649,7 @@ export default function GastosPage() {
 
                 {/* Botones */}
                 <div className="ef-boton" style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                  <button className="btn-primary" onClick={() => createExpense(false)} style={{ padding: '9px 20px', width: '100%' }}>
+                  <button className="btn-primary" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
                     <i className="bi bi-plus-lg" />
                   </button>
                   {selectedPeople.length === 1 && (
