@@ -1116,9 +1116,9 @@ export default function GastosPage() {
         const ent = getOrCreate(key, c.person, c.personUserId || null);
         if ((c.paidAmount || 0) > 0.01) {
           ent.owesYou.push({ expenseName: e.name, amount: c.paidAmount, date: e.date, expenseId: e.id, chargeId: c.id, partial: true });
-          ent.owesYou.push({ expenseName: e.name, amount: parseFloat((c.amount - c.paidAmount).toFixed(2)), date: e.date, expenseId: e.id, chargeId: c.id });
+          ent.owesYou.push({ expenseName: e.name, amount: parseFloat((c.amount - c.paidAmount).toFixed(2)), date: e.date, expenseId: e.id, chargeId: c.id, pendingConfirmation: c.pendingConfirmation });
         } else {
-          ent.owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id });
+          ent.owesYou.push({ expenseName: e.name, amount: c.amount, date: e.date, expenseId: e.id, chargeId: c.id, pendingConfirmation: c.pendingConfirmation });
         }
       });
     });
@@ -1128,9 +1128,9 @@ export default function GastosPage() {
       const ent = getOrCreate(key, item.fromName, item.fromUserId || null);
       if ((item.paidAmount || 0) > 0.01) {
         ent.youOwe.push({ expenseName: item.expenseName, amount: item.paidAmount, date: item.date, expenseId: item.expenseId, chargeId: item.id, partial: true });
-        ent.youOwe.push({ expenseName: item.expenseName, amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), date: item.date, expenseId: item.expenseId, chargeId: item.id });
+        ent.youOwe.push({ expenseName: item.expenseName, amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), date: item.date, expenseId: item.expenseId, chargeId: item.id, pendingConfirmation: item.pendingConfirmation });
       } else {
-        ent.youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id });
+        ent.youOwe.push({ expenseName: item.expenseName, amount: item.amount, date: item.date, expenseId: item.expenseId, chargeId: item.id, pendingConfirmation: item.pendingConfirmation });
       }
     });
     const netOf = arr => arr.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
@@ -1732,11 +1732,13 @@ export default function GastosPage() {
                       <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
                         style={{
                           borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                          border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)',
-                          color: 'rgba(255,255,255,.5)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                          border: c.pendingConfirmation ? '1px solid rgba(234,179,8,.4)' : '1px solid rgba(255,255,255,.1)',
+                          background: c.pendingConfirmation ? 'rgba(234,179,8,.15)' : 'rgba(255,255,255,.05)',
+                          color: c.pendingConfirmation ? '#facc15' : 'rgba(255,255,255,.5)',
+                          whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
                           fontFamily: 'inherit',
                         }}>
-                        <i className="bi bi-circle" style={{ fontSize: '.8rem' }} />
+                        <i className={`bi ${c.pendingConfirmation ? 'bi-hourglass-split' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
                         {c.person}
                         <span style={{ opacity: .65 }}>${fmt(parseFloat((c.amount - c.paidAmount).toFixed(2)))}</span>
                       </button>,
@@ -1746,13 +1748,13 @@ export default function GastosPage() {
                     <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
                       style={{
                         borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                        border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
-                        background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
-                        color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
+                        border: c.paid ? '1px solid rgba(52,211,153,.3)' : c.pendingConfirmation ? '1px solid rgba(234,179,8,.4)' : '1px solid rgba(255,255,255,.1)',
+                        background: c.paid ? 'rgba(52,211,153,.13)' : c.pendingConfirmation ? 'rgba(234,179,8,.15)' : 'rgba(255,255,255,.05)',
+                        color: c.paid ? 'var(--paid)' : c.pendingConfirmation ? '#facc15' : 'rgba(255,255,255,.5)',
                         whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
                         fontFamily: 'inherit',
                       }}>
-                      <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
+                      <i className={`bi ${c.paid ? 'bi-check-circle-fill' : c.pendingConfirmation ? 'bi-hourglass-split' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
                       {c.person}
                       <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
                     </button>,
@@ -1838,7 +1840,7 @@ export default function GastosPage() {
                   <i className="bi bi-check-circle-fill" /> Pagado
                 </span>
               )
-            ) : pendingRequests.has(item.id) ? (
+            ) : pendingRequests.has(item.id) || item.pendingConfirmation ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                   <i className="bi bi-hourglass-split" /> Esperando...
@@ -1851,7 +1853,7 @@ export default function GastosPage() {
             ) : (
               <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
                 style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Pagado
+                <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Marcar pagado
               </button>
             )}
           </div>
@@ -2259,11 +2261,12 @@ export default function GastosPage() {
                       </div>
                       {entry.owesYou.map((r, ri) => (
                         <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
                             {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                             {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
+                            {!r.partial && r.pendingConfirmation && <span style={{ marginLeft: 5, fontSize: '.7rem', color: '#facc15', textDecoration: 'none', fontStyle: 'italic' }}>esperando confirmación</span>}
                           </span>
-                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
                         </div>
                       ))}
                       {entry.owesYou.filter(r => !r.partial).length > 1 && (
@@ -2283,11 +2286,12 @@ export default function GastosPage() {
                       </div>
                       {entry.youOwe.map((r, ri) => (
                         <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
                             {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                             {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
+                            {!r.partial && r.pendingConfirmation && <span style={{ marginLeft: 5, fontSize: '.7rem', color: '#facc15', textDecoration: 'none', fontStyle: 'italic' }}>esperando confirmación</span>}
                           </span>
-                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
                         </div>
                       ))}
                       {entry.youOwe.filter(r => !r.partial).length > 1 && (
@@ -3245,6 +3249,20 @@ export default function GastosPage() {
               <button onClick={() => setShowUpdateModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </div>
             <div className="modal-body" style={{ paddingTop: 0 }}>
+              <div style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#a78bfa', marginBottom: 16 }}>Julio 2026</div>
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+                <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 10, background: 'rgba(167,139,250,.12)', border: '1px solid rgba(167,139,250,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="bi bi-calendar-range" style={{ color: '#c4b5fd', fontSize: '1.1rem' }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '.92rem', marginBottom: 4 }}>Pago en cuotas</div>
+                  <div style={{ fontSize: '.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Al crear un gasto, en <strong style={{ color: 'var(--text)' }}>"Ver más..."</strong> ahora hay una pestaña <strong style={{ color: 'var(--text)' }}>"Cuotas"</strong>: ingresa el nombre, el monto mensual, cuántas cuotas son, a quién cobrarle y el mes de inicio. Se crea la primera cuota al instante, y las siguientes aparecen solas cada mes hasta completarlas — no hace falta volver a crearlas a mano. Esos gastos se marcan con el rótulo <strong style={{ color: '#c4b5fd' }}>"Pago en cuotas"</strong>, y su botón "Editar" te muestra cuántas van creadas y cuántas pagadas, dejándote cambiar el monto mensual o la cantidad total para las cuotas que faltan (las ya generadas no cambian).
+                  </div>
+                </div>
+              </div>
+
               <div style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#a78bfa', marginBottom: 16 }}>Junio 2026</div>
 
               <div style={{ display: 'flex', gap: 12, marginBottom: 18 }}>

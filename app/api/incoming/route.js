@@ -11,7 +11,12 @@ export async function GET() {
       c.id, c.amount::float, c.paid, COALESCE(c.paid_amount, 0)::float as paid_amount, c.expense_id,
       e.name as expense_name, e.date, e.month,
       e.user_id as from_user_id,
-      u.display_name as from_name, u.username as from_username
+      u.display_name as from_name, u.username as from_username,
+      EXISTS(
+        SELECT 1 FROM notifications n
+        WHERE n.type = 'charge_paid' AND n.reference_id = c.id
+          AND n.from_user_id = ${session.userId} AND n.read = FALSE
+      ) as pending_confirmation
     FROM charges c
     JOIN expenses e ON e.id = c.expense_id
     JOIN users u ON u.id = e.user_id
@@ -31,5 +36,6 @@ export async function GET() {
     fromUserId: c.from_user_id,
     fromName: c.from_name,
     fromUsername: c.from_username,
+    pendingConfirmation: c.pending_confirmation,
   })));
 }

@@ -14,7 +14,11 @@ export async function GET() {
           'id', c.id, 'person', c.person_name,
           'personUserId', c.person_user_id,
           'amount', c.amount::float, 'paid', c.paid,
-          'paidAmount', COALESCE(c.paid_amount, 0)::float
+          'paidAmount', COALESCE(c.paid_amount, 0)::float,
+          'pendingConfirmation', EXISTS(
+            SELECT 1 FROM notifications n
+            WHERE n.type = 'charge_paid' AND n.reference_id = c.id AND n.read = FALSE
+          )
         ) ORDER BY c.id
       ) FILTER (WHERE c.id IS NOT NULL), '[]') as charges
     FROM expenses e
