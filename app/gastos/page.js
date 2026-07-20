@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { addMonthsISO } from '@/lib/dates';
 
 // ── Avatar helper ──────────────────────────────────────────────────────────────
 function UserAvatar({ user, size = 32 }) {
@@ -42,6 +43,22 @@ function fmtMonth(yyyymm) {
 }
 function fmt(n) { return Math.round(Number(n)).toLocaleString('es-CL'); }
 
+// Misma fórmula que createExpense(): tu parte es el resto automático.
+function splitLikeMainForm(total, keys, availPeople) {
+  if (!keys.length) return { myShare: total, charges: [] };
+  const n = keys.length + 1;
+  const base = Math.round(total / n * 100) / 100;
+  const rem = Math.round((total - base * n) * 100) / 100;
+  const charges = keys.map((key, i) => {
+    const p = availPeople.find(p => p.key === key);
+    return {
+      person: p.name, personUserId: p.userId || null,
+      amount: i === 0 ? Math.round((base + rem) * 100) / 100 : base,
+    };
+  });
+  return { myShare: base, charges };
+}
+
 function loadContacts() {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(localStorage.getItem('contactos') || '[]'); } catch { return []; }
@@ -62,6 +79,136 @@ function Toast({ toast }) {
   return (
     <div className="toast" style={{ ...colors[toast.type], fontWeight: 600 }}>
       {toast.msg}
+    </div>
+  );
+}
+
+// ── Reusable person picker (dropdown, same look as the main "Personas" selector) ─
+function PersonDropdown({ isOpen, onToggleOpen, options, selectedKeys, onToggle, onOtro }) {
+  const meOption = options.find(p => p.isMe);
+  const friends = options.filter(p => !p.isMe && p.userId);
+  const contactsList = options.filter(p => !p.isMe && !p.userId);
+  const selectedOptions = selectedKeys.map(k => options.find(p => p.key === k)).filter(Boolean);
+  const selectedCount = selectedOptions.length;
+
+  return (
+    <div data-adv-picker style={{ position: 'relative' }}>
+      <div onClick={onToggleOpen}
+        style={{
+          background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: '8px 12px', cursor: 'pointer', minHeight: 40,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          color: selectedCount ? 'var(--text)' : 'var(--text-muted)',
+          userSelect: 'none',
+        }}>
+        <span style={{ fontSize: 14 }}>
+          {selectedCount === 0 ? 'Seleccionar...' :
+            selectedCount === 1 ? '1 persona' : `${selectedCount} personas`}
+        </span>
+        <i className="bi bi-chevron-down" style={{ fontSize: '.75rem', opacity: .4 }} />
+      </div>
+
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1050,
+          background: 'var(--surface2)', border: '1px solid rgba(201,154,20,.2)', borderRadius: 12,
+          overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
+          boxShadow: '0 8px 28px rgba(0,0,0,.6)',
+        }}>
+          {meOption && (() => {
+            const sel = selectedKeys.includes(meOption.key);
+            return (
+              <div
+                onClick={() => onToggle(meOption.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                  cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
+                  background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
+                  borderBottom: (friends.length > 0 || contactsList.length > 0) ? '1px solid rgba(201,154,20,.1)' : 'none',
+                }}>
+                <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
+                {meOption.name}
+              </div>
+            );
+          })()}
+
+          {friends.length > 0 && (
+            <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase' }}>
+              Amigos
+            </div>
+          )}
+          {friends.map(p => {
+            const sel = selectedKeys.includes(p.key);
+            return (
+              <div key={p.key}
+                onClick={() => onToggle(p.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                  cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
+                  background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
+                }}>
+                <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
+                {p.name}
+              </div>
+            );
+          })}
+
+          {contactsList.length > 0 && (
+            <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase', borderTop: friends.length ? '1px solid rgba(201,154,20,.1)' : 'none' }}>
+              Contactos
+            </div>
+          )}
+          {contactsList.map(p => {
+            const sel = selectedKeys.includes(p.key);
+            return (
+              <div key={p.key}
+                onClick={() => onToggle(p.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                  cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
+                  background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
+                }}>
+                <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
+                {p.name}
+              </div>
+            );
+          })}
+
+          {!meOption && friends.length === 0 && contactsList.length === 0 && (
+            <div style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: '.82rem', cursor: 'default' }}>
+              Sin amigos ni contactos — usa "Otro..." para agregar
+            </div>
+          )}
+
+          <div onClick={onOtro}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+              cursor: 'pointer', color: 'var(--gold2)', borderTop: '1px solid rgba(201,154,20,.1)',
+              fontSize: '.9rem',
+            }}>
+            <i className="bi bi-plus-circle" style={{ fontSize: '.9rem' }} />
+            Otro...
+          </div>
+        </div>
+      )}
+
+      {selectedOptions.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {selectedOptions.map(p => (
+            <span key={p.key} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(201,154,20,.18)', border: '1px solid rgba(201,154,20,.35)',
+              color: 'var(--gold2)', borderRadius: 99, padding: '4px 10px 4px 12px', fontSize: '.82rem', fontWeight: 500,
+            }}>
+              {p.isMe ? `⭐ ${p.name}` : p.name}
+              <button onClick={() => onToggle(p.key)}
+                style={{ background: 'none', border: 'none', color: 'inherit', padding: 0, lineHeight: 1, cursor: 'pointer', opacity: .6, fontSize: '1rem' }}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -99,6 +246,14 @@ export default function GastosPage() {
   const [advancedCharges, setAdvancedCharges] = useState(null);
   const [tipApplied, setTipApplied] = useState(false);
   const [advancedTab, setAdvancedTab] = useState('items');
+  const [advancedPickerOpen, setAdvancedPickerOpen] = useState(null); // item.id | 'cuotas' | null
+  const [otroTarget, setOtroTarget] = useState(null); // null | {type:'item', itemId} | {type:'cuotas'}
+  // Cuotas (recurring monthly expense)
+  const [cuotasName, setCuotasName] = useState('');
+  const [cuotasMonto, setCuotasMonto] = useState('');
+  const [cuotasCount, setCuotasCount] = useState('3');
+  const [cuotasChargedTo, setCuotasChargedTo] = useState([]);
+  const [cuotasSubmitting, setCuotasSubmitting] = useState(false);
 
   // Edit expense
   const [editingId, setEditingId] = useState(null);
@@ -279,10 +434,11 @@ export default function GastosPage() {
       if (peopleWrapRef.current && !peopleWrapRef.current.contains(e.target)) setPanelOpen(false);
       if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setShowUserMenu(false);
       if (notifMenuRef.current && !notifMenuRef.current.contains(e.target)) setShowNotifications(false);
+      if (advancedPickerOpen !== null && !e.target.closest('[data-adv-picker]')) setAdvancedPickerOpen(null);
     }
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, []);
+  }, [advancedPickerOpen]);
 
   // Poll notifications every 30s
   useEffect(() => {
@@ -426,8 +582,10 @@ export default function GastosPage() {
     setSelectedPeople(prev => prev.filter((_, i) => i !== idx));
   }
 
-  function handleOtroClick() {
+  function handleOtroClick(target = null) {
     setPanelOpen(false);
+    setAdvancedPickerOpen(null);
+    setOtroTarget(target);
     setAddPersonVal('');
     setShowAddPerson(true);
   }
@@ -442,11 +600,21 @@ export default function GastosPage() {
       saveContacts(list);
       setContacts(list);
     }
-    setSelectedPeople(prev => {
-      if (prev.some(p => p.name.toLowerCase() === name.toLowerCase())) return prev;
-      return [...prev, { name, userId: null }];
-    });
+    const key = `c_${name}`;
+    if (otroTarget?.type === 'item') {
+      setAdvancedItems(prev => prev.map(i => i.id === otroTarget.itemId
+        ? { ...i, chargedTo: i.chargedTo.includes(key) ? i.chargedTo : [...i.chargedTo, key] }
+        : i));
+    } else if (otroTarget?.type === 'cuotas') {
+      setCuotasChargedTo(prev => prev.includes(key) ? prev : [...prev, key]);
+    } else {
+      setSelectedPeople(prev => {
+        if (prev.some(p => p.name.toLowerCase() === name.toLowerCase())) return prev;
+        return [...prev, { name, userId: null }];
+      });
+    }
     setShowAddPerson(false);
+    setOtroTarget(null);
     showToast(`"${name}" agregado y seleccionado.`, 'success');
   }
 
@@ -1470,7 +1638,7 @@ export default function GastosPage() {
               )}
 
               {/* Otro */}
-              <div onClick={handleOtroClick}
+              <div onClick={() => handleOtroClick()}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
                   cursor: 'pointer', color: 'var(--gold2)', borderTop: '1px solid rgba(201,154,20,.1)',
@@ -2638,8 +2806,68 @@ export default function GastosPage() {
           setShowAdvanced(false);
         };
 
+        const cuotasAvailPeople = availPeople.filter(p => !p.isMe);
+        const cuotasMontoNum = parseFloat(cuotasMonto) || 0;
+        const cuotasCountNum = parseInt(cuotasCount, 10) || 0;
+        const cuotasStartDay = Number(todayISO().slice(8, 10));
+        const { myShare: cuotasPreviewMyShare } = splitLikeMainForm(cuotasMontoNum, cuotasChargedTo, cuotasAvailPeople);
+
+        const applyCuotas = async () => {
+          const name = cuotasName.trim();
+          const monto = parseFloat(cuotasMonto);
+          const count = parseInt(cuotasCount, 10);
+
+          if (!name) return showToast('Ingresa el nombre del gasto.', 'danger');
+          if (!monto || monto <= 0) return showToast('El monto mensual debe ser mayor a 0.', 'danger');
+          if (!count || count < 1) return showToast('Ingresa un número de cuotas válido.', 'danger');
+          if (count > 60) return showToast('Máximo 60 cuotas.', 'danger');
+
+          const { myShare, charges } = splitLikeMainForm(monto, cuotasChargedTo, cuotasAvailPeople);
+          const startDay = Number(todayISO().slice(8, 10));
+
+          setCuotasSubmitting(true);
+          let res, failed = false;
+          if (count === 1) {
+            const { date, month } = addMonthsISO(selectedMonth, 0, startDay);
+            res = await fetch('/api/expenses', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name, total: monto, date, myShare, month, charges }),
+            });
+          } else {
+            res = await fetch('/api/installment-plans', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name, monthlyAmount: monto, totalCount: count,
+                startMonth: selectedMonth, dayOfMonth: startDay, myShare, charges,
+              }),
+            });
+          }
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            showToast(d.error || 'Error al crear las cuotas.', 'danger');
+            failed = true;
+          }
+          setCuotasSubmitting(false);
+          await fetchExpenses();
+
+          if (!failed) {
+            setShowAdvanced(false);
+            setCuotasName(''); setCuotasMonto(''); setCuotasCount('3');
+            setCuotasChargedTo([]); setAdvancedTab('items');
+            showToast(
+              count > 1
+                ? `Primera cuota creada. Las ${count - 1} restantes se crearán automáticamente cada mes.`
+                : `Gasto "${name}" creado.`,
+              'success'
+            );
+          }
+        };
+
         const tabs = [
           { key: 'items', label: 'Por ítem', icon: 'bi-list-ul', desc: 'Enlista los ítems del gasto y elige a quién cobrarle por cada uno.' },
+          { key: 'cuotas', label: 'Cuotas', icon: 'bi-calendar-range', desc: 'Crea un gasto que se repite por varios meses. Cada mes se genera un cobro independiente.' },
         ];
         const tabStyle = active => ({ padding: '9px 16px', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.83rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, transition: 'all .15s', whiteSpace: 'nowrap' });
 
@@ -2688,29 +2916,22 @@ export default function GastosPage() {
                         </button>
                       )}
                     </div>
-                    {availPeople.length === 0 ? (
-                      <p style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>Sin amigos ni contactos. Agrega desde la pestaña Amigos.</p>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Cobrar a</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {availPeople.map(p => {
-                            const sel = item.chargedTo.includes(p.key);
-                            return (
-                              <button key={p.key} onClick={() => togglePerson(item.id, p.key)}
-                                style={{ padding: '4px 11px', borderRadius: 99, border: sel ? '1px solid rgba(201,154,20,.5)' : '1px solid rgba(255,255,255,.1)', background: sel ? 'rgba(201,154,20,.18)' : 'transparent', color: sel ? 'var(--gold2)' : 'var(--text-muted)', fontSize: '.8rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: sel ? 600 : 400, transition: 'all .12s' }}>
-                                {p.name}
-                              </button>
-                            );
-                          })}
+                    <div>
+                      <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Cobrar a</div>
+                      <PersonDropdown
+                        isOpen={advancedPickerOpen === item.id}
+                        onToggleOpen={() => setAdvancedPickerOpen(o => o === item.id ? null : item.id)}
+                        options={availPeople}
+                        selectedKeys={item.chargedTo}
+                        onToggle={key => togglePerson(item.id, key)}
+                        onOtro={() => handleOtroClick({ type: 'item', itemId: item.id })}
+                      />
+                      {item.chargedTo.length > 1 && item.cost && (
+                        <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                          ${fmt(parseFloat(item.cost) / item.chargedTo.length)} cada uno
                         </div>
-                        {item.chargedTo.length > 1 && item.cost && (
-                          <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                            ${fmt(parseFloat(item.cost) / item.chargedTo.length)} cada uno
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 ))}
 
@@ -2745,14 +2966,68 @@ export default function GastosPage() {
                     </div>
                   )}
                 </>)}
+
+                {advancedTab === 'cuotas' && (
+                  <div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
+                      <input type="text" placeholder="Ej: Notebook, Refrigerador..." value={cuotasName}
+                        onChange={e => setCuotasName(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto mensual</label>
+                        <div style={{ display: 'flex' }}>
+                          <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                          <input type="number" placeholder="0" value={cuotasMonto} min="1" step="1"
+                            onChange={e => setCuotasMonto(e.target.value)}
+                            style={{ flex: 1, borderRadius: '0 8px 8px 0', borderLeft: 'none' }} />
+                        </div>
+                      </div>
+                      <div style={{ width: 100 }}>
+                        <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Cuotas</label>
+                        <input type="number" min="1" max="60" step="1" value={cuotasCount}
+                          onChange={e => setCuotasCount(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Cobrar a</div>
+                      <PersonDropdown
+                        isOpen={advancedPickerOpen === 'cuotas'}
+                        onToggleOpen={() => setAdvancedPickerOpen(o => o === 'cuotas' ? null : 'cuotas')}
+                        options={cuotasAvailPeople}
+                        selectedKeys={cuotasChargedTo}
+                        onToggle={key => setCuotasChargedTo(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])}
+                        onOtro={() => handleOtroClick({ type: 'cuotas' })}
+                      />
+                    </div>
+
+                    {cuotasMontoNum > 0 && cuotasCountNum >= 1 && (
+                      <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px', fontSize: '.85rem' }}>
+                        <div>{cuotasCountNum} cuota{cuotasCountNum > 1 ? 's' : ''} de ${fmt(cuotasMontoNum)}, primera en {fmtMonth(selectedMonth)}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '.78rem', marginTop: 4 }}>
+                          Última cuota: {fmtMonth(addMonthsISO(selectedMonth, cuotasCountNum - 1, cuotasStartDay).month)}
+                        </div>
+                        <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8 }}>
+                          Tu parte mensual: ${fmt(cuotasPreviewMyShare)} · Compromiso total: ${fmt(cuotasMontoNum * cuotasCountNum)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, flexShrink: 0 }}>
-                <button onClick={() => setShowAdvanced(false)}
+                <button onClick={() => setShowAdvanced(false)} disabled={cuotasSubmitting}
                   style={{ flex: 1, background: 'none', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', padding: '10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: '.9rem' }}>
                   Cancelar
                 </button>
-                <button onClick={applyAdvanced} className="btn-primary" style={{ flex: 2, padding: '10px' }}>
-                  Aplicar
+                <button onClick={() => advancedTab === 'cuotas' ? applyCuotas() : applyAdvanced()} disabled={cuotasSubmitting}
+                  className="btn-primary" style={{ flex: 2, padding: '10px' }}>
+                  {advancedTab === 'cuotas'
+                    ? (cuotasSubmitting ? 'Creando...' : 'Crear cuotas')
+                    : 'Aplicar'}
                 </button>
               </div>
             </div>
@@ -2812,11 +3087,11 @@ export default function GastosPage() {
 
       {/* ══ MODAL: Add person (Otro...) ══ */}
       {showAddPerson && (
-        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowAddPerson(false)}>
+        <div className="overlay" onClick={e => { if (e.target === e.currentTarget) { setShowAddPerson(false); setOtroTarget(null); } }}>
           <div className="modal-box" style={{ maxWidth: 340 }}>
             <div className="modal-header">
               <span style={{ fontWeight: 600 }}><i className="bi bi-person-plus" style={{ marginRight: 8 }} />Agregar persona</span>
-              <button onClick={() => setShowAddPerson(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+              <button onClick={() => { setShowAddPerson(false); setOtroTarget(null); }} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </div>
             <div className="modal-body">
               <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Nombre</label>
@@ -2827,7 +3102,7 @@ export default function GastosPage() {
               <p style={{ fontSize: '.82rem', color: 'var(--text-muted)', marginTop: 8 }}>Se guardará en contactos y se añadirá al gasto.</p>
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowAddPerson(false)}>Cancelar</button>
+              <button className="btn-secondary" onClick={() => { setShowAddPerson(false); setOtroTarget(null); }}>Cancelar</button>
               <button className="btn-primary" onClick={saveNewPerson}>Guardar</button>
             </div>
           </div>

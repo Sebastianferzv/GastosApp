@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import sql from '@/lib/db';
+import { createExpenseWithCharges } from '@/lib/expenses';
 
 export async function GET() {
   const session = await getSession();
@@ -35,26 +36,7 @@ export async function POST(request) {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const { name, total, date, myShare, month, charges } = await request.json();
-  const [expense] = await sql`
-    INSERT INTO expenses (user_id, name, total, date, my_share, month)
-    VALUES (${session.userId}, ${name}, ${total}, ${date}, ${myShare}, ${month})
-    RETURNING id
-  `;
+  const id = await createExpenseWithCharges({ userId: session.userId, name, total, date, myShare, month, charges });
 
-  const [creator] = await sql`SELECT display_name FROM users WHERE id = ${session.userId}`;
-
-  for (const c of charges || []) {
-    await sql`
-      INSERT INTO charges (expense_id, person_name, person_user_id, amount)
-      VALUES (${expense.id}, ${c.person}, ${c.personUserId || null}, ${c.amount})
-    `;
-    if (c.personUserId) {
-      await sql`
-        INSERT INTO notifications (user_id, type, message, from_user_id, reference_id)
-        VALUES (${c.personUserId}, 'expense_added', ${`${creator.display_name} te agregó al gasto "${name}"`}, ${session.userId}, ${expense.id})
-      `;
-    }
-  }
-
-  return NextResponse.json({ id: expense.id });
+  return NextResponse.json({ id });
 }

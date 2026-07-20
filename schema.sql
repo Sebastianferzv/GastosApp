@@ -56,6 +56,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS installment_plans (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  monthly_amount DECIMAL(10,2) NOT NULL,
+  my_share DECIMAL(10,2) NOT NULL DEFAULT 0,
+  charges JSONB NOT NULL DEFAULT '[]',
+  total_count INTEGER NOT NULL,
+  created_count INTEGER NOT NULL DEFAULT 0,
+  next_month VARCHAR(7) NOT NULL,
+  day_of_month INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Run these ALTER statements if the tables already exist:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- (notifications table is new, no alter needed)
