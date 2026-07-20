@@ -1735,6 +1735,7 @@ export default function GastosPage() {
                           border: c.pendingConfirmation ? '1px solid rgba(234,179,8,.4)' : '1px solid rgba(255,255,255,.1)',
                           background: c.pendingConfirmation ? 'rgba(234,179,8,.15)' : 'rgba(255,255,255,.05)',
                           color: c.pendingConfirmation ? '#facc15' : 'rgba(255,255,255,.5)',
+                          textDecoration: c.pendingConfirmation ? 'line-through' : 'none',
                           whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
                           fontFamily: 'inherit',
                         }}>
@@ -1751,6 +1752,7 @@ export default function GastosPage() {
                         border: c.paid ? '1px solid rgba(52,211,153,.3)' : c.pendingConfirmation ? '1px solid rgba(234,179,8,.4)' : '1px solid rgba(255,255,255,.1)',
                         background: c.paid ? 'rgba(52,211,153,.13)' : c.pendingConfirmation ? 'rgba(234,179,8,.15)' : 'rgba(255,255,255,.05)',
                         color: c.paid ? 'var(--paid)' : c.pendingConfirmation ? '#facc15' : 'rgba(255,255,255,.5)',
+                        textDecoration: c.pendingConfirmation ? 'line-through' : 'none',
                         whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
                         fontFamily: 'inherit',
                       }}>
@@ -2261,12 +2263,12 @@ export default function GastosPage() {
                       </div>
                       {entry.owesYou.map((r, ri) => (
                         <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: !r.partial && r.pendingConfirmation ? 'line-through' : 'none' }}>
                             {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                             {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
                             {!r.partial && r.pendingConfirmation && <span style={{ marginLeft: 5, fontSize: '.7rem', color: '#facc15', textDecoration: 'none', fontStyle: 'italic' }}>esperando confirmación</span>}
                           </span>
-                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: !r.partial && r.pendingConfirmation ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
                         </div>
                       ))}
                       {entry.owesYou.filter(r => !r.partial).length > 1 && (
@@ -2286,12 +2288,12 @@ export default function GastosPage() {
                       </div>
                       {entry.youOwe.map((r, ri) => (
                         <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : r.pendingConfirmation ? '#facc15' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: !r.partial && r.pendingConfirmation ? 'line-through' : 'none' }}>
                             {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
                             {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
                             {!r.partial && r.pendingConfirmation && <span style={{ marginLeft: 5, fontSize: '.7rem', color: '#facc15', textDecoration: 'none', fontStyle: 'italic' }}>esperando confirmación</span>}
                           </span>
-                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : r.pendingConfirmation ? '#facc15' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: !r.partial && r.pendingConfirmation ? 'line-through' : 'none' }}>${fmt(r.amount)}</span>
                         </div>
                       ))}
                       {entry.youOwe.filter(r => !r.partial).length > 1 && (
