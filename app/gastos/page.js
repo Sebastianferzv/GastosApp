@@ -81,7 +81,7 @@ export default function GastosPage() {
   const [contacts, setContacts] = useState([]);
 
   // UI state
-  const [activeTab, setActiveTab] = useState('gastos'); // 'gastos' | 'cobran'
+  const [activeTab, setActiveTab] = useState('resumen'); // 'resumen' | 'gastos' | 'cobran'
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [filterPending, setFilterPending] = useState(true);
   const [filterIncomingPending, setFilterIncomingPending] = useState(true);
@@ -125,7 +125,6 @@ export default function GastosPage() {
   const [addMonthVal, setAddMonthVal] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // {id, name}
-  const [showResumen, setShowResumen] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [addPersonVal, setAddPersonVal] = useState('');
@@ -1366,6 +1365,189 @@ export default function GastosPage() {
     },
   };
 
+  const nuevoGastoForm = (
+    <div className="card" style={{ marginBottom: 24, padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', whiteSpace: 'nowrap' }}>Nuevo Gasto</span>
+        <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
+      </div>
+
+      <div className="expense-form">
+        {/* Monto */}
+        <div className="ef-monto">
+          <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto</label>
+          <div style={{ display: 'flex' }}>
+            <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+            <input type="number" placeholder="0" value={formTotal} min="1" step="1"
+              style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+              onChange={e => setFormTotal(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Nombre */}
+        <div className="ef-nombre">
+          <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
+          <input type="text" placeholder="Cena, arriendo..." value={formName}
+            onChange={e => setFormName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createExpense()} />
+        </div>
+
+        {/* Personas */}
+        <div className="ef-people" style={{ position: 'relative' }} ref={peopleWrapRef}>
+          <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Personas</label>
+          <div onClick={() => setPanelOpen(p => !p)}
+            style={{
+              background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
+              padding: '8px 12px', cursor: 'pointer', minHeight: 40,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              color: selectedPeople.length ? 'var(--text)' : 'var(--text-muted)',
+              userSelect: 'none',
+            }}>
+            <span style={{ fontSize: 14 }}>
+              {selectedPeople.length === 0 ? 'Seleccionar...' :
+                selectedPeople.length === 1 ? '1 persona' : `${selectedPeople.length} personas`}
+            </span>
+            <i className="bi bi-chevron-down" style={{ fontSize: '.75rem', opacity: .4 }} />
+          </div>
+
+          {/* People dropdown panel */}
+          {panelOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1050,
+              background: 'var(--surface2)', border: '1px solid rgba(201,154,20,.2)', borderRadius: 12,
+              overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
+              boxShadow: '0 8px 28px rgba(0,0,0,.6)',
+            }}>
+              {/* Accepted friends */}
+              {acceptedFriends.length > 0 && (
+                <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                  Amigos
+                </div>
+              )}
+              {acceptedFriends.map(f => {
+                const sel = selectedPeople.some(p => p.userId === f.userId);
+                return (
+                  <div key={f.friendshipId}
+                    onClick={() => togglePersonInPanel(f.displayName, f.userId)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
+                      background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
+                    }}>
+                    <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
+                    {f.displayName}
+                    <span style={{ fontSize: '.75rem', opacity: .5, marginLeft: 'auto' }}>@{f.username}</span>
+                  </div>
+                );
+              })}
+
+              {/* Contacts */}
+              {contacts.length > 0 && (
+                <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase', borderTop: acceptedFriends.length ? '1px solid rgba(201,154,20,.1)' : 'none' }}>
+                  Contactos
+                </div>
+              )}
+              {contacts.map(c => {
+                const sel = selectedPeople.some(p => p.name.toLowerCase() === c.toLowerCase() && !p.userId);
+                return (
+                  <div key={c}
+                    onClick={() => togglePersonInPanel(c, null)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
+                      background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
+                    }}>
+                    <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
+                    {c}
+                  </div>
+                );
+              })}
+
+              {acceptedFriends.length === 0 && contacts.length === 0 && (
+                <div style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: '.82rem', cursor: 'default' }}>
+                  Sin amigos ni contactos — usa "Otro..." para agregar
+                </div>
+              )}
+
+              {/* Otro */}
+              <div onClick={handleOtroClick}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                  cursor: 'pointer', color: 'var(--gold2)', borderTop: '1px solid rgba(201,154,20,.1)',
+                  fontSize: '.9rem',
+                }}>
+                <i className="bi bi-plus-circle" style={{ fontSize: '.9rem' }} />
+                Otro...
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Fecha */}
+        <div className="ef-fecha">
+          <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
+          <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
+        </div>
+
+        {/* Botón agregar */}
+        <button className="btn-primary ef-boton" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
+          <i className="bi bi-plus-lg" />
+        </button>
+      </div>
+
+      {selectedPeople.length === 1 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <button className="btn-primary" onClick={() => createExpense(true)}
+            style={{ padding: '7px 16px', fontSize: '.75rem', fontWeight: 700 }}>
+            Cobrar 100%
+          </button>
+        </div>
+      )}
+
+      {/* Ver más / advanced builder */}
+      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={() => setShowAdvanced(true)}
+          style={{ background: 'none', border: 'none', color: advancedCharges ? 'var(--gold)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <i className="bi bi-sliders" />
+          {advancedCharges ? 'Configuración avanzada aplicada ✓' : 'Ver más...'}
+        </button>
+        {advancedCharges && (
+          <button onClick={() => { setAdvancedCharges(null); setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]); setSelectedPeople([]); setFormTotal(''); }}
+            style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', padding: 0, opacity: .7 }}>
+            Quitar
+          </button>
+        )}
+      </div>
+
+      {/* Chips */}
+      {selectedPeople.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {selectedPeople.map((p, i) => (
+            <span key={i} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(201,154,20,.18)', border: '1px solid rgba(201,154,20,.35)',
+              color: 'var(--gold2)', borderRadius: 99, padding: '4px 10px 4px 12px', fontSize: '.82rem', fontWeight: 500,
+            }}>
+              {p.name}
+              {p.userId && <span style={{ fontSize: '.7rem', opacity: .6 }}>✓</span>}
+              <button onClick={() => removeChip(i)}
+                style={{ background: 'none', border: 'none', color: 'inherit', padding: 0, lineHeight: 1, cursor: 'pointer', opacity: .6, fontSize: '1rem' }}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Preview */}
+      {previewShare !== null && (
+        <div style={{ marginTop: 8, fontSize: '.82rem', color: 'var(--text-muted)' }}>
+          {previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={{ minHeight: '100vh' }}>
       {/* ── Navbar ── */}
@@ -1376,9 +1558,6 @@ export default function GastosPage() {
             <i className="bi bi-cash-stack" style={{ background: 'var(--grad)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }} />
           </button>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button style={btnStyle.contacts} onClick={() => setShowResumen(true)}>
-              <i className="bi bi-bar-chart-line" style={{ marginRight: 4 }} />Resumen
-            </button>
             <button style={btnStyle.contacts} onClick={() => { setShowSocial(true); setSocialTab('amigos'); fetchFriends(); fetchGroups(); }}>
               <i className="bi bi-people" style={{ marginRight: 4 }} />Amigos
             </button>
@@ -1491,6 +1670,19 @@ export default function GastosPage() {
       {/* ── Main tabs ── */}
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '0 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', marginBottom: 20, marginTop: 16 }}>
+          {[{ key: 'resumen', label: 'Resumen' }].map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                padding: '10px 20px', fontSize: '.92rem', fontWeight: 600, position: 'relative',
+                color: activeTab === t.key ? 'var(--gold2)' : 'var(--text-muted)',
+                borderBottom: activeTab === t.key ? '2px solid var(--gold2)' : '2px solid transparent',
+                marginBottom: -1, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+              {t.label}
+            </button>
+          ))}
+          <div style={{ flex: 1 }} />
           {[
             { key: 'gastos', label: 'Mis gastos' },
             { key: 'cobran', label: 'Me cobran' },
@@ -1512,196 +1704,127 @@ export default function GastosPage() {
             </button>
           ))}
           <button onClick={async () => { await Promise.all([fetchExpenses(), fetchIncoming(), fetchFriends(), fetchNotifications()]); showToast('Actualizado.', 'success'); }}
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '6px 4px', marginBottom: -1, fontSize: '1.05rem' }}
+            style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '6px 4px', marginBottom: -1, fontSize: '1.05rem' }}
             title="Actualizar">
             <i className="bi bi-arrow-clockwise" />
           </button>
         </div>
 
+        {/* ══ TAB: Resumen ══ */}
+        {activeTab === 'resumen' && (
+          <div>
+            {nuevoGastoForm}
+
+            {resumenData.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
+                <i className="bi bi-check-circle" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
+                <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin deudas pendientes</p>
+              </div>
+            ) : resumenData.map((entry, idx) => {
+              const totalOwesYou = entry.owesYou.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+              const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+              const net = totalOwesYou - totalYouOwe;
+              const isCompletingCard = completingResumen.has(entry.name);
+              const allRows = [...entry.owesYou, ...entry.youOwe];
+              return (
+                <div key={entry.name}
+                  className={isCompletingCard ? 'completing' : ''}
+                  style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '1rem 1.1rem', marginBottom: 12, position: 'relative' }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: '1rem', fontWeight: 700 }}>
+                      <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />{entry.name}
+                    </span>
+                  </div>
+
+                  {/* Te debe section */}
+                  {entry.owesYou.length > 0 && (
+                    <div style={{ marginBottom: entry.youOwe.length > 0 ? 10 : 0 }}>
+                      <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
+                        Te debe
+                      </div>
+                      {entry.owesYou.map((r, ri) => (
+                        <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                            {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                            {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
+                          </span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                        </div>
+                      ))}
+                      {entry.owesYou.filter(r => !r.partial).length > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: 'var(--gold)', fontWeight: 600 }}>
+                          Subtotal ${fmt(totalOwesYou)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Les debes section */}
+                  {entry.youOwe.length > 0 && (
+                    <div>
+                      {entry.owesYou.length > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,.07)', marginBottom: 10 }} />}
+                      <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#fca5a5', marginBottom: 4 }}>
+                        Les debes
+                      </div>
+                      {entry.youOwe.map((r, ri) => (
+                        <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
+                          <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
+                            {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
+                            {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
+                          </span>
+                          <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
+                        </div>
+                      ))}
+                      {entry.youOwe.filter(r => !r.partial).length > 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: '#fca5a5', fontWeight: 600 }}>
+                          Subtotal ${fmt(totalYouOwe)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Net total row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '2px solid rgba(255,255,255,.1)' }}>
+                    <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                      {net >= 0 ? 'Te deben' : 'Les debes'}
+                    </span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 800, color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>
+                      {net >= 0 ? '+' : '-'}${fmt(Math.abs(net))}
+                    </span>
+                  </div>
+
+                  {/* Footer buttons */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,.07)' }}>
+                    <button onClick={() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); }}
+                      title="Liquidar todo"
+                      style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                      <i className="bi bi-check-all" />
+                    </button>
+                    {entry.youOwe.some(r => !r.partial) && (
+                      <button onClick={() => { setPartialTarget(entry); setPartialAmountStr(''); setShowPartialModal(true); }}
+                        title="Pago parcial"
+                        style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.2)', color: 'rgba(96,165,250,.7)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                        <i className="bi bi-cash-coin" />
+                      </button>
+                    )}
+                    <button onClick={() => copyResumen(entry)}
+                      title="Copiar"
+                      style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px', borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit' }}>
+                      <i className="bi bi-clipboard" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* ══ TAB: Mis gastos ══ */}
         {activeTab === 'gastos' && (
           <div>
             {/* Add expense form */}
-            <div className="card" style={{ marginBottom: 24, padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', whiteSpace: 'nowrap' }}>Nuevo Gasto</span>
-                <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
-              </div>
-
-              <div className="expense-form">
-                {/* Monto */}
-                <div className="ef-monto">
-                  <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Monto</label>
-                  <div style={{ display: 'flex' }}>
-                    <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                    <input type="number" placeholder="0" value={formTotal} min="1" step="1"
-                      style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                      onChange={e => setFormTotal(e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Nombre */}
-                <div className="ef-nombre">
-                  <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
-                  <input type="text" placeholder="Cena, arriendo..." value={formName}
-                    onChange={e => setFormName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && createExpense()} />
-                </div>
-
-                {/* Personas */}
-                <div className="ef-people" style={{ position: 'relative' }} ref={peopleWrapRef}>
-                  <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Personas</label>
-                  <div onClick={() => setPanelOpen(p => !p)}
-                    style={{
-                      background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8,
-                      padding: '8px 12px', cursor: 'pointer', minHeight: 40,
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      color: selectedPeople.length ? 'var(--text)' : 'var(--text-muted)',
-                      userSelect: 'none',
-                    }}>
-                    <span style={{ fontSize: 14 }}>
-                      {selectedPeople.length === 0 ? 'Seleccionar...' :
-                        selectedPeople.length === 1 ? '1 persona' : `${selectedPeople.length} personas`}
-                    </span>
-                    <i className="bi bi-chevron-down" style={{ fontSize: '.75rem', opacity: .4 }} />
-                  </div>
-
-                  {/* People dropdown panel */}
-                  {panelOpen && (
-                    <div style={{
-                      position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1050,
-                      background: 'var(--surface2)', border: '1px solid rgba(201,154,20,.2)', borderRadius: 12,
-                      overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
-                      boxShadow: '0 8px 28px rgba(0,0,0,.6)',
-                    }}>
-                      {/* Accepted friends */}
-                      {acceptedFriends.length > 0 && (
-                        <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase' }}>
-                          Amigos
-                        </div>
-                      )}
-                      {acceptedFriends.map(f => {
-                        const sel = selectedPeople.some(p => p.userId === f.userId);
-                        return (
-                          <div key={f.friendshipId}
-                            onClick={() => togglePersonInPanel(f.displayName, f.userId)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                              cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
-                              background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
-                            }}>
-                            <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
-                            {f.displayName}
-                            <span style={{ fontSize: '.75rem', opacity: .5, marginLeft: 'auto' }}>@{f.username}</span>
-                          </div>
-                        );
-                      })}
-
-                      {/* Contacts */}
-                      {contacts.length > 0 && (
-                        <div style={{ padding: '6px 14px 2px', fontSize: '.68rem', fontWeight: 700, color: 'var(--gold)', letterSpacing: '.08em', textTransform: 'uppercase', borderTop: acceptedFriends.length ? '1px solid rgba(201,154,20,.1)' : 'none' }}>
-                          Contactos
-                        </div>
-                      )}
-                      {contacts.map(c => {
-                        const sel = selectedPeople.some(p => p.name.toLowerCase() === c.toLowerCase() && !p.userId);
-                        return (
-                          <div key={c}
-                            onClick={() => togglePersonInPanel(c, null)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                              cursor: 'pointer', color: sel ? 'var(--gold2)' : 'var(--text-muted)',
-                              background: sel ? 'rgba(201,154,20,.12)' : 'transparent', fontSize: '.9rem',
-                            }}>
-                            <i className={`bi ${sel ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.9rem' }} />
-                            {c}
-                          </div>
-                        );
-                      })}
-
-                      {acceptedFriends.length === 0 && contacts.length === 0 && (
-                        <div style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: '.82rem', cursor: 'default' }}>
-                          Sin amigos ni contactos — usa "Otro..." para agregar
-                        </div>
-                      )}
-
-                      {/* Otro */}
-                      <div onClick={handleOtroClick}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                          cursor: 'pointer', color: 'var(--gold2)', borderTop: '1px solid rgba(201,154,20,.1)',
-                          fontSize: '.9rem',
-                        }}>
-                        <i className="bi bi-plus-circle" style={{ fontSize: '.9rem' }} />
-                        Otro...
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Fecha */}
-                <div className="ef-fecha">
-                  <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
-                  <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
-                </div>
-
-                {/* Botón agregar */}
-                <button className="btn-primary ef-boton" onClick={() => createExpense(false)} style={{ padding: '9px 36px' }}>
-                  <i className="bi bi-plus-lg" />
-                </button>
-              </div>
-
-              {selectedPeople.length === 1 && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-                  <button className="btn-primary" onClick={() => createExpense(true)}
-                    style={{ padding: '7px 16px', fontSize: '.75rem', fontWeight: 700 }}>
-                    Cobrar 100%
-                  </button>
-                </div>
-              )}
-
-              {/* Ver más / advanced builder */}
-              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button onClick={() => setShowAdvanced(true)}
-                  style={{ background: 'none', border: 'none', color: advancedCharges ? 'var(--gold)' : 'var(--text-muted)', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <i className="bi bi-sliders" />
-                  {advancedCharges ? 'Configuración avanzada aplicada ✓' : 'Ver más...'}
-                </button>
-                {advancedCharges && (
-                  <button onClick={() => { setAdvancedCharges(null); setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]); setSelectedPeople([]); setFormTotal(''); }}
-                    style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', padding: 0, opacity: .7 }}>
-                    Quitar
-                  </button>
-                )}
-              </div>
-
-              {/* Chips */}
-              {selectedPeople.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-                  {selectedPeople.map((p, i) => (
-                    <span key={i} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: 'rgba(201,154,20,.18)', border: '1px solid rgba(201,154,20,.35)',
-                      color: 'var(--gold2)', borderRadius: 99, padding: '4px 10px 4px 12px', fontSize: '.82rem', fontWeight: 500,
-                    }}>
-                      {p.name}
-                      {p.userId && <span style={{ fontSize: '.7rem', opacity: .6 }}>✓</span>}
-                      <button onClick={() => removeChip(i)}
-                        style={{ background: 'none', border: 'none', color: 'inherit', padding: 0, lineHeight: 1, cursor: 'pointer', opacity: .6, fontSize: '1rem' }}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Preview */}
-              {previewShare !== null && (
-                <div style={{ marginTop: 8, fontSize: '.82rem', color: 'var(--text-muted)' }}>
-                  {previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno
-                </div>
-              )}
-            </div>
+            {nuevoGastoForm}
 
             {/* Filter */}
             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
@@ -2086,122 +2209,6 @@ export default function GastosPage() {
             <div className="modal-footer" style={{ justifyContent: 'center', gap: 12 }}>
               <button className="btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancelar</button>
               <button className="btn-danger" onClick={confirmDelete}>Eliminar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ MODAL: Resumen ══ */}
-      {showResumen && (
-        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowResumen(false)}>
-          <div className="modal-box">
-            <div className="modal-header">
-              <span style={{ fontWeight: 600 }}><i className="bi bi-bar-chart-line" style={{ marginRight: 8 }} />Resumen de deudas</span>
-              <button onClick={() => setShowResumen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
-            </div>
-            <div className="modal-body">
-              {resumenData.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                  <i className="bi bi-check-circle" style={{ fontSize: '2.5rem', opacity: .3, display: 'block' }} />
-                  <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin deudas pendientes</p>
-                </div>
-              ) : resumenData.map((entry, idx) => {
-                const totalOwesYou = entry.owesYou.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
-                const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
-                const net = totalOwesYou - totalYouOwe;
-                const isCompletingCard = completingResumen.has(entry.name);
-                const allRows = [...entry.owesYou, ...entry.youOwe];
-                return (
-                  <div key={entry.name}
-                    className={isCompletingCard ? 'completing' : ''}
-                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '1rem 1.1rem', marginBottom: 12, position: 'relative' }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                      <span style={{ fontSize: '1rem', fontWeight: 700 }}>
-                        <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />{entry.name}
-                      </span>
-                    </div>
-
-                    {/* Te debe section */}
-                    {entry.owesYou.length > 0 && (
-                      <div style={{ marginBottom: entry.youOwe.length > 0 ? 10 : 0 }}>
-                        <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 4 }}>
-                          Te debe
-                        </div>
-                        {entry.owesYou.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
-                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
-                              {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ parcial</span>}
-                            </span>
-                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : 'var(--gold2)', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
-                          </div>
-                        ))}
-                        {entry.owesYou.filter(r => !r.partial).length > 1 && (
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: 'var(--gold)', fontWeight: 600 }}>
-                            Subtotal ${fmt(totalOwesYou)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Les debes section */}
-                    {entry.youOwe.length > 0 && (
-                      <div>
-                        {entry.owesYou.length > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,.07)', marginBottom: 10 }} />}
-                        <div style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: '#fca5a5', marginBottom: 4 }}>
-                          Les debes
-                        </div>
-                        {entry.youOwe.map((r, ri) => (
-                          <div key={ri} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '.28rem 0', borderTop: '1px solid rgba(255,255,255,.05)', fontSize: '.83rem', opacity: r.partial ? .55 : 1 }}>
-                            <span style={{ color: r.partial ? 'rgba(52,211,153,.85)' : 'var(--text-muted)', flex: 1, paddingRight: 8, textDecoration: 'none' }}>
-                              {r.expenseName}<span style={{ opacity: .4, marginLeft: 6, fontSize: '.75rem' }}>{fmtDate(r.date)}</span>
-                              {r.partial && <span style={{ marginLeft: 5, fontSize: '.7rem', color: 'rgba(52,211,153,.9)', textDecoration: 'none', fontStyle: 'italic' }}>✓ pagado</span>}
-                            </span>
-                            <span style={{ fontWeight: 500, color: r.partial ? 'rgba(52,211,153,.7)' : '#fca5a5', whiteSpace: 'nowrap', textDecoration: 'none' }}>${fmt(r.amount)}</span>
-                          </div>
-                        ))}
-                        {entry.youOwe.filter(r => !r.partial).length > 1 && (
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4, fontSize: '.8rem', color: '#fca5a5', fontWeight: 600 }}>
-                            Subtotal ${fmt(totalYouOwe)}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Net total row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '2px solid rgba(255,255,255,.1)' }}>
-                      <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                        {net >= 0 ? 'Te deben' : 'Les debes'}
-                      </span>
-                      <span style={{ fontSize: '1.1rem', fontWeight: 800, color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>
-                        {net >= 0 ? '+' : '-'}${fmt(Math.abs(net))}
-                      </span>
-                    </div>
-
-                    {/* Footer buttons */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,.07)' }}>
-                      <button onClick={() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); }}
-                        title="Liquidar todo"
-                        style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
-                        <i className="bi bi-check-all" />
-                      </button>
-                      {entry.youOwe.some(r => !r.partial) && (
-                        <button onClick={() => { setPartialTarget(entry); setPartialAmountStr(''); setShowPartialModal(true); }}
-                          title="Pago parcial"
-                          style={{ background: 'rgba(59,130,246,.05)', border: '1px solid rgba(59,130,246,.2)', color: 'rgba(96,165,250,.7)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
-                          <i className="bi bi-cash-coin" />
-                        </button>
-                      )}
-                      <button onClick={() => copyResumen(entry)}
-                        title="Copiar"
-                        style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px 8px', borderRadius: 7, fontSize: '.82rem', lineHeight: 1, fontFamily: 'inherit' }}>
-                        <i className="bi bi-clipboard" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         </div>
