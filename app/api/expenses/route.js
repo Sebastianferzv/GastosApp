@@ -8,7 +8,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
   const expenses = await sql`
-    SELECT e.id, e.name, e.total::float, e.date, e.my_share::float, e.month,
+    SELECT e.id, e.name, e.total::float, e.date, e.my_share::float, e.month, e.installment_plan_id,
       COALESCE(json_agg(
         json_build_object(
           'id', c.id, 'person', c.person_name,
@@ -28,6 +28,7 @@ export async function GET() {
     id: e.id, name: e.name, total: e.total,
     date: e.date ? e.date.toISOString().slice(0, 10) : null,
     myShare: e.my_share, month: e.month, charges: e.charges,
+    installmentPlanId: e.installment_plan_id,
   })));
 }
 

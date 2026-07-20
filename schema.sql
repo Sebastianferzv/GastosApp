@@ -73,3 +73,4 @@ CREATE TABLE IF NOT EXISTS installment_plans (
 -- Run these ALTER statements if the tables already exist:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- (notifications table is new, no alter needed)
+-- ALTER TABLE expenses ADD COLUMN IF NOT EXISTS installment_plan_id INTEGER REFERENCES installment_plans(id) ON DELETE SET NULL;

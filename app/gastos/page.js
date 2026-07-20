@@ -230,8 +230,8 @@ export default function GastosPage() {
   // UI state
   const [activeTab, setActiveTab] = useState('resumen'); // 'resumen' | 'gastos' | 'cobran'
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
-  const [filterPending, setFilterPending] = useState(true);
-  const [filterIncomingPending, setFilterIncomingPending] = useState(true);
+  const [showGastosHistory, setShowGastosHistory] = useState(false);
+  const [showCobranHistory, setShowCobranHistory] = useState(false);
 
   // Form (add expense)
   const [formName, setFormName] = useState('');
@@ -253,7 +253,16 @@ export default function GastosPage() {
   const [cuotasMonto, setCuotasMonto] = useState('');
   const [cuotasCount, setCuotasCount] = useState('3');
   const [cuotasChargedTo, setCuotasChargedTo] = useState([]);
+  const [cuotasStartMonth, setCuotasStartMonth] = useState(todayISO().slice(0, 7));
   const [cuotasSubmitting, setCuotasSubmitting] = useState(false);
+
+  // Edit installment plan
+  const [showEditPlan, setShowEditPlan] = useState(false);
+  const [editPlanId, setEditPlanId] = useState(null);
+  const [editPlanData, setEditPlanData] = useState(null);
+  const [editPlanMonto, setEditPlanMonto] = useState('');
+  const [editPlanCount, setEditPlanCount] = useState('');
+  const [editPlanSubmitting, setEditPlanSubmitting] = useState(false);
 
   // Edit expense
   const [editingId, setEditingId] = useState(null);
@@ -689,7 +698,7 @@ export default function GastosPage() {
     if (expense) {
       const updatedCharges = expense.charges.map(c => c.id === chargeId ? { ...c, paid: newPaid } : c);
       const justCompleted = newPaid && updatedCharges.length > 0 && updatedCharges.every(c => c.paid);
-      if (justCompleted && filterPending) {
+      if (justCompleted) {
         completingExpenses.current.add(expenseId);
         forceUpdate(n => n + 1);
         // Apply completing class
@@ -817,6 +826,42 @@ export default function GastosPage() {
     setLockedKeys(new Set());
     setEditTotal(0);
     setEditingTab('monto');
+  }
+
+  // ── Edit installment plan ────────────────────────────────────────────────────
+  async function openEditPlan(planId) {
+    const res = await fetch(`/api/installment-plans/${planId}`);
+    if (!res.ok) return showToast('Error al cargar la cuota.', 'danger');
+    const data = await res.json();
+    setEditPlanId(planId);
+    setEditPlanData(data);
+    setEditPlanMonto(String(data.monthlyAmount));
+    setEditPlanCount(String(data.totalCount));
+    setShowEditPlan(true);
+  }
+
+  async function savePlanEdit() {
+    const monto = parseFloat(editPlanMonto);
+    const count = parseInt(editPlanCount, 10);
+    if (!monto || monto <= 0) return showToast('El monto mensual debe ser mayor a 0.', 'danger');
+    if (!count || count < editPlanData.createdCount) return showToast(`No puede ser menor a las ${editPlanData.createdCount} cuotas ya creadas.`, 'danger');
+    if (count > 60) return showToast('Máximo 60 cuotas.', 'danger');
+
+    setEditPlanSubmitting(true);
+    const res = await fetch(`/api/installment-plans/${editPlanId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monthlyAmount: monto, totalCount: count }),
+    });
+    setEditPlanSubmitting(false);
+
+    if (res.ok) {
+      setShowEditPlan(false);
+      showToast('Cuotas actualizadas.', 'success');
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Error al guardar.', 'danger');
+    }
   }
 
   function resetEqualSplit(people, total) {
@@ -1308,12 +1353,9 @@ export default function GastosPage() {
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
-  const filteredExpenses = expenses.filter(e => {
-    if (filterPending) {
-      const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
-      if (allPaid && !completingExpenses.current.has(e.id)) return false;
-    }
-    return true;
+  const pendingExpenses = expenses.filter(e => {
+    const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
+    return !allPaid || completingExpenses.current.has(e.id);
   });
 
   const pendingIncomingCount = incoming.filter(i => !i.paid).length;
@@ -1512,6 +1554,310 @@ export default function GastosPage() {
       );
     }
     return null;
+  }
+
+  // ── Expense card (reused by the "Mis gastos" pending list and the Historial modal) ─
+  function renderExpenseCard(e) {
+    const totalPaid = e.charges.reduce((s, c) => s + (c.paid ? c.amount : (c.paidAmount || 0)), 0);
+    const pendiente = e.charges.reduce((s, c) => s + (c.paid ? 0 : c.amount - (c.paidAmount || 0)), 0);
+    const myShare = e.myShare ?? Math.round(e.total / (e.charges.length + 1) * 100) / 100;
+    const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
+    const isEditing = editingId === e.id;
+
+    return (
+      <div key={e.id}
+        data-expense-id={e.id}
+        style={{
+          background: allPaid ? 'rgba(52,211,153,.05)' : 'var(--surface)',
+          border: `1px solid ${allPaid ? 'rgba(52,211,153,.2)' : 'var(--border)'}`,
+          borderRadius: 16,
+          marginBottom: 16,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+        {/* Left accent stripe */}
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
+          background: allPaid ? 'var(--paid)' : 'var(--grad)',
+          borderRadius: '16px 0 0 16px',
+        }} />
+
+        <div style={{ padding: '16px 16px 12px 20px' }}>
+          {/* Top row: amount + title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff', lineHeight: 1, flexShrink: 0 }}>
+              ${fmt(e.total)}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ fontSize: '1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
+              <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{fmtDate(e.date)}</div>
+            </div>
+          </div>
+          {/* Badges row */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {e.installmentPlanId && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(167,139,250,.15)', color: '#c4b5fd' }}>
+                <i className="bi bi-calendar-range" /> Pago en cuotas
+              </span>
+            )}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(201,154,20,.15)', color: 'var(--gold2)' }}>
+              <i className="bi bi-person-fill" /> Tu parte ${fmt(myShare)}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(248,113,113,.12)', color: '#fca5a5' }}>
+              <i className="bi bi-clock" /> Pendiente ${fmt(pendiente)}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(52,211,153,.12)', color: 'var(--paid)' }}>
+              <i className="bi bi-check-circle" /> Cobrado ${fmt(totalPaid)}
+            </span>
+          </div>
+
+          {/* Charges row or edit panel */}
+          {isEditing ? (
+            <div style={{ marginTop: 16, background: 'rgba(201,154,20,.05)', border: '1px solid rgba(201,154,20,.12)', borderRadius: 12, padding: 14 }}>
+              {/* Edit fields */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <div style={{ flex: '1 1 100%' }}>
+                  <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
+                  <input type="text" value={editName} onChange={ev => setEditName(ev.target.value)} />
+                </div>
+                <div style={{ flex: '1 1 130px' }}>
+                  <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
+                  <input type="date" value={editDate} onChange={ev => setEditDate(ev.target.value)} />
+                </div>
+                <div style={{ flex: '0 0 110px' }}>
+                  <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Total</label>
+                  <div style={{ display: 'flex' }}>
+                    <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 8px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                    <input type="number" value={editTotal} min="1" step="1"
+                      style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                      onChange={ev => handleEditTotalChange(ev.target.value, e)} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Personas */}
+              {(() => {
+                const memberKeys = new Set(editPeople.map(p => p.personUserId ? `f_${p.personUserId}` : `c_${p.person}`));
+                const addablePeople = [
+                  ...acceptedFriends.filter(f => !memberKeys.has(`f_${f.userId}`)).map(f => ({ name: f.displayName, userId: f.userId })),
+                  ...contacts.filter(c => !memberKeys.has(`c_${c}`)).map(c => ({ name: c, userId: null })),
+                ];
+                return (
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 12 }}>
+                    <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Personas</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold2)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
+                        <i className="bi bi-person-fill" style={{ fontSize: '.75rem', opacity: .6 }} />Tú
+                      </span>
+                      {editPeople.map(p => (
+                        <span key={p.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
+                          {p.person}
+                          <button onClick={() => removePersonFromEdit(p.key)}
+                            style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: '.95rem', opacity: .7 }}>×</button>
+                        </span>
+                      ))}
+                      {addablePeople.length > 0 && (
+                        <button onClick={() => setShowEditPeoplePicker(v => !v)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px dashed rgba(255,255,255,.2)', color: 'var(--text-muted)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
+                          <i className="bi bi-plus" />Agregar
+                        </button>
+                      )}
+                    </div>
+                    {showEditPeoplePicker && addablePeople.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 4 }}>
+                        {addablePeople.map(p => (
+                          <button key={p.userId ?? p.name} onClick={() => { addPersonToEdit(p); setShowEditPeoplePicker(false); }}
+                            style={{ background: 'rgba(201,154,20,.08)', border: '1px solid rgba(201,154,20,.2)', color: 'var(--gold2)', borderRadius: 99, padding: '4px 12px', cursor: 'pointer', fontSize: '.82rem', fontFamily: 'inherit' }}>
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Distribution tabs */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 8 }}>
+                <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Distribución</div>
+                <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.1)', marginBottom: 12 }}>
+                  {['monto', 'porcentaje', 'propina', 'descuento'].map(tab => (
+                    <button key={tab} onClick={() => switchEditTab(tab, e)}
+                      style={{
+                        flex: 1, padding: '6px 4px', fontSize: '.73rem', fontWeight: 600,
+                        background: editingTab === tab ? 'rgba(201,154,20,.2)' : 'transparent',
+                        border: 'none', borderRight: tab !== 'descuento' ? '1px solid rgba(255,255,255,.08)' : 'none',
+                        color: editingTab === tab ? 'var(--gold2)' : 'var(--text-muted)',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}>
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {renderEditTabContent(e)}
+                <button onClick={() => { if (confirmReset) { resetEqualSplit(editPeople, editTotal); setConfirmReset(false); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }}
+                  style={{ marginTop: 10, width: '100%', background: confirmReset ? 'rgba(248,113,113,.06)' : 'none', border: `1px solid ${confirmReset ? 'rgba(248,113,113,.15)' : 'rgba(255,255,255,.1)'}`, color: confirmReset ? 'rgba(248,113,113,.7)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
+                  <i className="bi bi-arrow-repeat" />{confirmReset ? '¿Seguro?' : 'Restablecer'}
+                </button>
+              </div>
+
+              {/* Save / Cancel */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button onClick={() => saveEdit(e)}
+                  style={{ background: 'linear-gradient(135deg,#34d399,#10b981)', border: 'none', color: '#022c22', fontWeight: 600, padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <i className="bi bi-check-lg" /> Guardar
+                </button>
+                <button onClick={cancelEdit} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '.78rem' }}>
+                  <i className="bi bi-x-lg" />
+                </button>
+              </div>
+            </div>
+          ) : e.charges.length > 0 ? (
+            <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {e.charges.flatMap(c => {
+                  if ((c.paidAmount || 0) > 0.01 && !c.paid) {
+                    return [
+                      <button key={`${c.id}_p`} disabled
+                        style={{
+                          borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'default', opacity: .55,
+                          border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.13)',
+                          color: 'var(--paid)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontFamily: 'inherit',
+                        }}>
+                        <i className="bi bi-check-circle-fill" style={{ fontSize: '.8rem' }} />
+                        {c.person}
+                        <span style={{ opacity: .65 }}>${fmt(c.paidAmount)}</span>
+                      </button>,
+                      <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
+                        style={{
+                          borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
+                          border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)',
+                          color: 'rgba(255,255,255,.5)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                          fontFamily: 'inherit',
+                        }}>
+                        <i className="bi bi-circle" style={{ fontSize: '.8rem' }} />
+                        {c.person}
+                        <span style={{ opacity: .65 }}>${fmt(parseFloat((c.amount - c.paidAmount).toFixed(2)))}</span>
+                      </button>,
+                    ];
+                  }
+                  return [
+                    <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
+                      style={{
+                        borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
+                        border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
+                        background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
+                        color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
+                        whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+                        fontFamily: 'inherit',
+                      }}>
+                      <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
+                      {c.person}
+                      <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
+                    </button>,
+                  ];
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px', borderTop: '1px solid rgba(201,154,20,.08)' }}>
+          {!isEditing && (
+            <button onClick={() => e.installmentPlanId ? openEditPlan(e.installmentPlanId) : startEdit(e)}
+              style={{ background: 'rgba(234,88,12,.18)', border: '1px solid rgba(234,88,12,.35)', color: '#fb923c', cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: '.85rem', fontFamily: 'inherit' }}
+              title="Editar">
+              <i className="bi bi-pencil" />
+            </button>
+          )}
+          <button onClick={() => openDeleteConfirm(e.id, e.name)}
+            style={{ background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.3)', color: '#f87171', cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: '.85rem', fontFamily: 'inherit' }}
+            title="Eliminar">
+            <i className="bi bi-trash" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Incoming charges, grouped by person (reused by "Me cobran" pending list and Historial) ─
+  function renderIncomingGroups(list, { allowRevert, emptyText }) {
+    if (list.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
+          <i className="bi bi-inbox" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
+          <p style={{ marginTop: 12, fontSize: '.9rem' }}>{emptyText}</p>
+        </div>
+      );
+    }
+
+    // Group by person — split partial-paid items into two visual rows
+    const byPerson = {};
+    list.forEach(item => {
+      const key = item.fromName || item.fromUsername;
+      if (!byPerson[key]) byPerson[key] = [];
+      if ((item.paidAmount || 0) > 0.01 && !item.paid) {
+        byPerson[key].push({ ...item, _amount: item.paidAmount, _partial: true, _key: `${item.id}_p` });
+        byPerson[key].push({ ...item, _amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), _key: `${item.id}` });
+      } else {
+        byPerson[key].push({ ...item, _amount: item.amount, _key: `${item.id}` });
+      }
+    });
+
+    return Object.entries(byPerson).map(([person, items]) => (
+      <div key={person} style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+          <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', whiteSpace: 'nowrap' }}>
+            <i className="bi bi-person-fill" style={{ marginRight: 4 }} />{person}
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
+        </div>
+        {items.map(item => (
+          <div key={item._key} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, opacity: item._partial ? .6 : 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: 'none' }}>{item.expenseName}</div>
+              <div style={{ fontSize: '.75rem', color: item._partial ? 'rgba(52,211,153,.8)' : 'var(--text-muted)' }}>
+                {fmtDate(item.date)}{item._partial && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>✓ pagado parcialmente</span>}
+              </div>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item._partial ? 'var(--paid)' : (item.paid ? 'var(--paid)' : 'var(--text)'), textDecoration: 'none' }}>
+              ${fmt(item._amount)}
+            </div>
+            {item._partial ? (
+              <span style={{ fontSize: '.8rem', color: 'var(--paid)' }}><i className="bi bi-check-circle-fill" /></span>
+            ) : item.paid ? (
+              allowRevert ? (
+                <button onClick={() => { setRevertTarget(item); setShowRevertConfirm(true); }}
+                  style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                  <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }} /> Pagado
+                </button>
+              ) : (
+                <span style={{ fontSize: '.8rem', color: 'var(--paid)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <i className="bi bi-check-circle-fill" /> Pagado
+                </span>
+              )
+            ) : pendingRequests.has(item.id) ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                  <i className="bi bi-hourglass-split" /> Esperando...
+                </span>
+                <button onClick={() => cancelPaymentRequest(item.expenseId, item.id)}
+                  style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.25)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
+                style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Pagado
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    ));
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1994,251 +2340,28 @@ export default function GastosPage() {
             {/* Add expense form */}
             {nuevoGastoForm}
 
-            {/* Filter */}
+            {/* Historial */}
             <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setFilterPending(p => !p)}
+              <button onClick={() => setShowGastosHistory(true)}
                 style={{
-                  background: filterPending ? 'rgba(255,255,255,.04)' : 'rgba(201,154,20,.18)',
-                  border: filterPending ? '1px solid rgba(255,255,255,.12)' : '1px solid rgba(201,154,20,.5)',
-                  color: filterPending ? 'var(--text-muted)' : 'var(--gold2)',
-                  cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
+                  background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.12)',
+                  color: 'var(--text-muted)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
                   fontSize: '.8rem', fontWeight: 500, whiteSpace: 'nowrap', fontFamily: 'inherit',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                <i className={`bi ${filterPending ? 'bi-eye' : 'bi-eye-slash'}`} />
-                {filterPending ? 'Ver todo' : 'Solo pendientes'}
+                <i className="bi bi-clock-history" />
+                Historial
               </button>
             </div>
 
-            {/* Expense list */}
-            {filteredExpenses.length === 0 ? (
+            {/* Expense list (pendientes) */}
+            {pendingExpenses.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
                 <i className="bi bi-receipt" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
-                <p style={{ marginTop: 12, fontSize: '.9rem' }}>
-                  {filterPending ? 'Sin gastos pendientes' : 'Sin gastos registrados'}
-                </p>
+                <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin gastos pendientes</p>
               </div>
             ) : (
-              filteredExpenses.map(e => {
-                const totalPaid = e.charges.reduce((s, c) => s + (c.paid ? c.amount : (c.paidAmount || 0)), 0);
-                const pendiente = e.charges.reduce((s, c) => s + (c.paid ? 0 : c.amount - (c.paidAmount || 0)), 0);
-                const myShare = e.myShare ?? Math.round(e.total / (e.charges.length + 1) * 100) / 100;
-                const allPaid = e.charges.length === 0 || e.charges.every(c => c.paid);
-                const isEditing = editingId === e.id;
-                const isCompleting = completingExpenses.current.has(e.id);
-
-                return (
-                  <div key={e.id}
-                    data-expense-id={e.id}
-                    style={{
-                      background: allPaid ? 'rgba(52,211,153,.05)' : 'var(--surface)',
-                      border: `1px solid ${allPaid ? 'rgba(52,211,153,.2)' : 'var(--border)'}`,
-                      borderRadius: 16,
-                      marginBottom: 16,
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}>
-                    {/* Left accent stripe */}
-                    <div style={{
-                      position: 'absolute', left: 0, top: 0, bottom: 0, width: 4,
-                      background: allPaid ? 'var(--paid)' : 'var(--grad)',
-                      borderRadius: '16px 0 0 16px',
-                    }} />
-
-                    <div style={{ padding: '16px 16px 12px 20px' }}>
-                      {/* Top row: amount + title */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                        <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff', lineHeight: 1, flexShrink: 0 }}>
-                          ${fmt(e.total)}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                          <div style={{ fontSize: '1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-                          <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>{fmtDate(e.date)}</div>
-                        </div>
-                      </div>
-                      {/* Badges row */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(201,154,20,.15)', color: 'var(--gold2)' }}>
-                          <i className="bi bi-person-fill" /> Tu parte ${fmt(myShare)}
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(248,113,113,.12)', color: '#fca5a5' }}>
-                          <i className="bi bi-clock" /> Pendiente ${fmt(pendiente)}
-                        </span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 7, fontSize: '.78rem', fontWeight: 500, whiteSpace: 'nowrap', background: 'rgba(52,211,153,.12)', color: 'var(--paid)' }}>
-                          <i className="bi bi-check-circle" /> Cobrado ${fmt(totalPaid)}
-                        </span>
-                      </div>
-
-                      {/* Charges row or edit panel */}
-                      {isEditing ? (
-                        <div style={{ marginTop: 16, background: 'rgba(201,154,20,.05)', border: '1px solid rgba(201,154,20,.12)', borderRadius: 12, padding: 14 }}>
-                          {/* Edit fields */}
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                            <div style={{ flex: '1 1 100%' }}>
-                              <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Nombre</label>
-                              <input type="text" value={editName} onChange={e => setEditName(e.target.value)} />
-                            </div>
-                            <div style={{ flex: '1 1 130px' }}>
-                              <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Fecha</label>
-                              <input type="date" value={editDate} onChange={ev => setEditDate(ev.target.value)} />
-                            </div>
-                            <div style={{ flex: '0 0 110px' }}>
-                              <label style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Total</label>
-                              <div style={{ display: 'flex' }}>
-                                <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 8px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                                <input type="number" value={editTotal} min="1" step="1"
-                                  style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                                  onChange={ev => handleEditTotalChange(ev.target.value, e)} />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Personas */}
-                          {(() => {
-                            const memberKeys = new Set(editPeople.map(p => p.personUserId ? `f_${p.personUserId}` : `c_${p.person}`));
-                            const addablePeople = [
-                              ...acceptedFriends.filter(f => !memberKeys.has(`f_${f.userId}`)).map(f => ({ name: f.displayName, userId: f.userId })),
-                              ...contacts.filter(c => !memberKeys.has(`c_${c}`)).map(c => ({ name: c, userId: null })),
-                            ];
-                            return (
-                              <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 12 }}>
-                                <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Personas</div>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.25)', color: 'var(--gold2)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
-                                    <i className="bi bi-person-fill" style={{ fontSize: '.75rem', opacity: .6 }} />Tú
-                                  </span>
-                                  {editPeople.map(p => (
-                                    <span key={p.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.12)', color: 'var(--text)', borderRadius: 99, padding: '3px 10px', fontSize: '.8rem' }}>
-                                      {p.person}
-                                      <button onClick={() => removePersonFromEdit(p.key)}
-                                        style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: '.95rem', opacity: .7 }}>×</button>
-                                    </span>
-                                  ))}
-                                  {addablePeople.length > 0 && (
-                                    <button onClick={() => setShowEditPeoplePicker(v => !v)}
-                                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px dashed rgba(255,255,255,.2)', color: 'var(--text-muted)', borderRadius: 99, padding: '3px 10px', cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>
-                                      <i className="bi bi-plus" />Agregar
-                                    </button>
-                                  )}
-                                </div>
-                                {showEditPeoplePicker && addablePeople.length > 0 && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 4 }}>
-                                    {addablePeople.map(p => (
-                                      <button key={p.userId ?? p.name} onClick={() => { addPersonToEdit(p); setShowEditPeoplePicker(false); }}
-                                        style={{ background: 'rgba(201,154,20,.08)', border: '1px solid rgba(201,154,20,.2)', color: 'var(--gold2)', borderRadius: 99, padding: '4px 12px', cursor: 'pointer', fontSize: '.82rem', fontFamily: 'inherit' }}>
-                                        {p.name}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          {/* Distribution tabs */}
-                          <div style={{ borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12, marginBottom: 8 }}>
-                            <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Distribución</div>
-                            <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.1)', marginBottom: 12 }}>
-                              {['monto', 'porcentaje', 'propina', 'descuento'].map(tab => (
-                                <button key={tab} onClick={() => switchEditTab(tab, e)}
-                                  style={{
-                                    flex: 1, padding: '6px 4px', fontSize: '.73rem', fontWeight: 600,
-                                    background: editingTab === tab ? 'rgba(201,154,20,.2)' : 'transparent',
-                                    border: 'none', borderRight: tab !== 'descuento' ? '1px solid rgba(255,255,255,.08)' : 'none',
-                                    color: editingTab === tab ? 'var(--gold2)' : 'var(--text-muted)',
-                                    cursor: 'pointer', fontFamily: 'inherit',
-                                  }}>
-                                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                </button>
-                              ))}
-                            </div>
-                            {renderEditTabContent(e)}
-                            <button onClick={() => { if (confirmReset) { resetEqualSplit(editPeople, editTotal); setConfirmReset(false); } else { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); } }}
-                              style={{ marginTop: 10, width: '100%', background: confirmReset ? 'rgba(248,113,113,.06)' : 'none', border: `1px solid ${confirmReset ? 'rgba(248,113,113,.15)' : 'rgba(255,255,255,.1)'}`, color: confirmReset ? 'rgba(248,113,113,.7)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
-                              <i className="bi bi-arrow-repeat" />{confirmReset ? '¿Seguro?' : 'Restablecer'}
-                            </button>
-                          </div>
-
-                          {/* Save / Cancel */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-                            <button onClick={() => saveEdit(e)}
-                              style={{ background: 'linear-gradient(135deg,#34d399,#10b981)', border: 'none', color: '#022c22', fontWeight: 600, padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <i className="bi bi-check-lg" /> Guardar
-                            </button>
-                            <button onClick={cancelEdit} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '.78rem' }}>
-                              <i className="bi bi-x-lg" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : e.charges.length > 0 ? (
-                        <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,.07)', paddingTop: 12 }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                            {e.charges.flatMap(c => {
-                              if ((c.paidAmount || 0) > 0.01 && !c.paid) {
-                                return [
-                                  <button key={`${c.id}_p`} disabled
-                                    style={{
-                                      borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'default', opacity: .55,
-                                      border: '1px solid rgba(52,211,153,.3)', background: 'rgba(52,211,153,.13)',
-                                      color: 'var(--paid)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                      fontFamily: 'inherit',
-                                    }}>
-                                    <i className="bi bi-check-circle-fill" style={{ fontSize: '.8rem' }} />
-                                    {c.person}
-                                    <span style={{ opacity: .65 }}>${fmt(c.paidAmount)}</span>
-                                  </button>,
-                                  <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
-                                    style={{
-                                      borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                                      border: '1px solid rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)',
-                                      color: 'rgba(255,255,255,.5)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                      fontFamily: 'inherit',
-                                    }}>
-                                    <i className="bi bi-circle" style={{ fontSize: '.8rem' }} />
-                                    {c.person}
-                                    <span style={{ opacity: .65 }}>${fmt(parseFloat((c.amount - c.paidAmount).toFixed(2)))}</span>
-                                  </button>,
-                                ];
-                              }
-                              return [
-                                <button key={c.id} onClick={() => toggleCharge(e.id, c.id, c.paid)}
-                                  style={{
-                                    borderRadius: 99, padding: '6px 14px', fontSize: '.85rem', cursor: 'pointer',
-                                    border: c.paid ? '1px solid rgba(52,211,153,.3)' : '1px solid rgba(255,255,255,.1)',
-                                    background: c.paid ? 'rgba(52,211,153,.13)' : 'rgba(255,255,255,.05)',
-                                    color: c.paid ? 'var(--paid)' : 'rgba(255,255,255,.5)',
-                                    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                    fontFamily: 'inherit',
-                                  }}>
-                                  <i className={`bi ${c.paid ? 'bi-check-circle-fill' : 'bi-circle'}`} style={{ fontSize: '.8rem' }} />
-                                  {c.person}
-                                  <span style={{ opacity: .65 }}>${fmt(c.amount)}</span>
-                                </button>,
-                              ];
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {/* Footer */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '8px 16px', borderTop: '1px solid rgba(201,154,20,.08)' }}>
-                      {!isEditing && (
-                        <button onClick={() => startEdit(e)}
-                          style={{ background: 'rgba(234,88,12,.18)', border: '1px solid rgba(234,88,12,.35)', color: '#fb923c', cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: '.85rem', fontFamily: 'inherit' }}
-                          title="Editar">
-                          <i className="bi bi-pencil" />
-                        </button>
-                      )}
-                      <button onClick={() => openDeleteConfirm(e.id, e.name)}
-                        style={{ background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.3)', color: '#f87171', cursor: 'pointer', padding: '5px 9px', borderRadius: 8, fontSize: '.85rem', fontFamily: 'inherit' }}
-                        title="Eliminar">
-                        <i className="bi bi-trash" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              pendingExpenses.map(renderExpenseCard)
             )}
           </div>
         )}
@@ -2247,102 +2370,97 @@ export default function GastosPage() {
         {activeTab === 'cobran' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-              <button onClick={() => setFilterIncomingPending(p => !p)}
+              <button onClick={() => setShowCobranHistory(true)}
                 style={{
-                  background: filterIncomingPending ? 'rgba(201,154,20,.18)' : 'rgba(255,255,255,.04)',
-                  border: filterIncomingPending ? '1px solid rgba(201,154,20,.5)' : '1px solid rgba(255,255,255,.12)',
-                  color: filterIncomingPending ? 'var(--gold2)' : 'var(--text-muted)',
-                  cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
+                  background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.12)',
+                  color: 'var(--text-muted)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8,
                   fontSize: '.8rem', fontWeight: 500, fontFamily: 'inherit',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}>
-                <i className={`bi ${filterIncomingPending ? 'bi-eye-slash' : 'bi-eye'}`} />
-                {filterIncomingPending ? 'Ver todo' : 'Solo pendientes'}
+                <i className="bi bi-clock-history" />
+                Historial
               </button>
             </div>
 
-            {(() => {
-              const list = filterIncomingPending ? incoming.filter(i => !i.paid) : incoming;
-              if (list.length === 0) {
-                return (
-                  <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
-                    <i className="bi bi-inbox" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
-                    <p style={{ marginTop: 12, fontSize: '.9rem' }}>
-                      {filterIncomingPending ? 'Sin cobros pendientes' : 'Sin cobros recibidos'}
-                    </p>
-                  </div>
-                );
-              }
-
-              // Group by person — split partial-paid items into two visual rows
-              const byPerson = {};
-              list.forEach(item => {
-                const key = item.fromName || item.fromUsername;
-                if (!byPerson[key]) byPerson[key] = [];
-                if ((item.paidAmount || 0) > 0.01 && !item.paid) {
-                  byPerson[key].push({ ...item, _amount: item.paidAmount, _partial: true, _key: `${item.id}_p` });
-                  byPerson[key].push({ ...item, _amount: parseFloat((item.amount - item.paidAmount).toFixed(2)), _key: `${item.id}` });
-                } else {
-                  byPerson[key].push({ ...item, _amount: item.amount, _key: `${item.id}` });
-                }
-              });
-
-              return Object.entries(byPerson).map(([person, items]) => (
-                <div key={person} style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                    <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', whiteSpace: 'nowrap' }}>
-                      <i className="bi bi-person-fill" style={{ marginRight: 4 }} />{person}
-                    </span>
-                    <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
-                  </div>
-                  {items.map(item => (
-                    <div key={item._key} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, opacity: item._partial ? .6 : 1 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: 'none' }}>{item.expenseName}</div>
-                        <div style={{ fontSize: '.75rem', color: item._partial ? 'rgba(52,211,153,.8)' : 'var(--text-muted)' }}>
-                          {fmtDate(item.date)}{item._partial && <span style={{ marginLeft: 5, fontStyle: 'italic' }}>✓ pagado parcialmente</span>}
-                        </div>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '1.1rem', color: item._partial ? 'var(--paid)' : (item.paid ? 'var(--paid)' : 'var(--text)'), textDecoration: 'none' }}>
-                        ${fmt(item._amount)}
-                      </div>
-                      {item._partial ? (
-                        <span style={{ fontSize: '.8rem', color: 'var(--paid)' }}><i className="bi bi-check-circle-fill" /></span>
-                      ) : item.paid ? (
-                        !filterIncomingPending ? (
-                          <button onClick={() => { setRevertTarget(item); setShowRevertConfirm(true); }}
-                            style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                            <i className="bi bi-check-circle-fill" style={{ marginRight: 4 }} /> Pagado
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '.8rem', color: 'var(--paid)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <i className="bi bi-check-circle-fill" /> Pagado
-                          </span>
-                        )
-                      ) : pendingRequests.has(item.id) ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                            <i className="bi bi-hourglass-split" /> Esperando...
-                          </span>
-                          <button onClick={() => cancelPaymentRequest(item.expenseId, item.id)}
-                            style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.25)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.75rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button onClick={() => toggleIncomingPaid(item.expenseId, item.id)}
-                          style={{ background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', cursor: 'pointer', padding: '5px 12px', borderRadius: 8, fontSize: '.82rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                          <i className="bi bi-check-lg" style={{ marginRight: 4 }} /> Pagado
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ));
-            })()}
+            {renderIncomingGroups(incoming.filter(i => !i.paid), { allowRevert: false, emptyText: 'Sin cobros pendientes' })}
           </div>
         )}
       </div>
+
+      {/* ══ MODAL: Historial de gastos ══ */}
+      {showGastosHistory && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowGastosHistory(false)}>
+          <div className="modal-box" style={{ maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-clock-history" style={{ marginRight: 8 }} />Historial</span>
+              <button onClick={() => setShowGastosHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+              {expenses.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
+                  <i className="bi bi-receipt" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
+                  <p style={{ marginTop: 12, fontSize: '.9rem' }}>Sin gastos registrados</p>
+                </div>
+              ) : (
+                expenses.map(renderExpenseCard)
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Historial de cobros ══ */}
+      {showCobranHistory && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowCobranHistory(false)}>
+          <div className="modal-box" style={{ maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-clock-history" style={{ marginRight: 8 }} />Historial</span>
+              <button onClick={() => setShowCobranHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+              {renderIncomingGroups(incoming, { allowRevert: true, emptyText: 'Sin cobros recibidos' })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Editar cuotas ══ */}
+      {showEditPlan && editPlanData && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowEditPlan(false)}>
+          <div className="modal-box" style={{ maxWidth: 380 }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-calendar-range" style={{ marginRight: 8 }} />Editar cuotas</span>
+              <button onClick={() => setShowEditPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '.85rem', color: 'var(--text-muted)', marginBottom: 12 }}>{editPlanData.name}</p>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16, fontSize: '.85rem' }}>
+                <span>Creadas: <strong>{editPlanData.createdCount}/{editPlanData.totalCount}</strong></span>
+                <span>Pagadas: <strong>{editPlanData.paidCount}/{editPlanData.createdCount}</strong></span>
+              </div>
+              <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Monto mensual</label>
+              <div style={{ display: 'flex', marginBottom: 12 }}>
+                <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                <input type="number" min="1" step="1" value={editPlanMonto}
+                  onChange={e => setEditPlanMonto(e.target.value)}
+                  style={{ flex: 1, borderRadius: '0 8px 8px 0', borderLeft: 'none' }} />
+              </div>
+              <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cantidad total de cuotas</label>
+              <input type="number" min={editPlanData.createdCount} max="60" step="1" value={editPlanCount}
+                onChange={e => setEditPlanCount(e.target.value)} />
+              <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 10 }}>
+                Los cambios solo aplican a las cuotas que faltan por generarse.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowEditPlan(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={savePlanEdit} disabled={editPlanSubmitting}>
+                {editPlanSubmitting ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ MODAL: Add month ══ */}
       {showAddMonth && (
@@ -2821,6 +2939,7 @@ export default function GastosPage() {
           if (!monto || monto <= 0) return showToast('El monto mensual debe ser mayor a 0.', 'danger');
           if (!count || count < 1) return showToast('Ingresa un número de cuotas válido.', 'danger');
           if (count > 60) return showToast('Máximo 60 cuotas.', 'danger');
+          if (cuotasStartMonth < todayISO().slice(0, 7)) return showToast('El mes de inicio no puede ser anterior al mes actual.', 'danger');
 
           const { myShare, charges } = splitLikeMainForm(monto, cuotasChargedTo, cuotasAvailPeople);
           const startDay = Number(todayISO().slice(8, 10));
@@ -2828,7 +2947,7 @@ export default function GastosPage() {
           setCuotasSubmitting(true);
           let res, failed = false;
           if (count === 1) {
-            const { date, month } = addMonthsISO(selectedMonth, 0, startDay);
+            const { date, month } = addMonthsISO(cuotasStartMonth, 0, startDay);
             res = await fetch('/api/expenses', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2840,7 +2959,7 @@ export default function GastosPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 name, monthlyAmount: monto, totalCount: count,
-                startMonth: selectedMonth, dayOfMonth: startDay, myShare, charges,
+                startMonth: cuotasStartMonth, dayOfMonth: startDay, myShare, charges,
               }),
             });
           }
@@ -2855,7 +2974,7 @@ export default function GastosPage() {
           if (!failed) {
             setShowAdvanced(false);
             setCuotasName(''); setCuotasMonto(''); setCuotasCount('3');
-            setCuotasChargedTo([]); setAdvancedTab('items');
+            setCuotasChargedTo([]); setCuotasStartMonth(todayISO().slice(0, 7)); setAdvancedTab('items');
             showToast(
               count > 1
                 ? `Primera cuota creada. Las ${count - 1} restantes se crearán automáticamente cada mes.`
@@ -2993,6 +3112,12 @@ export default function GastosPage() {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: '.72rem', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Mes de inicio</label>
+                      <input type="month" value={cuotasStartMonth} min={todayISO().slice(0, 7)}
+                        onChange={e => setCuotasStartMonth(e.target.value)} />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
                       <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Cobrar a</div>
                       <PersonDropdown
                         isOpen={advancedPickerOpen === 'cuotas'}
@@ -3006,9 +3131,9 @@ export default function GastosPage() {
 
                     {cuotasMontoNum > 0 && cuotasCountNum >= 1 && (
                       <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px', fontSize: '.85rem' }}>
-                        <div>{cuotasCountNum} cuota{cuotasCountNum > 1 ? 's' : ''} de ${fmt(cuotasMontoNum)}, primera en {fmtMonth(selectedMonth)}</div>
+                        <div>{cuotasCountNum} cuota{cuotasCountNum > 1 ? 's' : ''} de ${fmt(cuotasMontoNum)}, primera en {fmtMonth(cuotasStartMonth)}</div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '.78rem', marginTop: 4 }}>
-                          Última cuota: {fmtMonth(addMonthsISO(selectedMonth, cuotasCountNum - 1, cuotasStartDay).month)}
+                          Última cuota: {fmtMonth(addMonthsISO(cuotasStartMonth, cuotasCountNum - 1, cuotasStartDay).month)}
                         </div>
                         <div style={{ borderTop: '1px solid rgba(201,154,20,.2)', marginTop: 8, paddingTop: 8 }}>
                           Tu parte mensual: ${fmt(cuotasPreviewMyShare)} · Compromiso total: ${fmt(cuotasMontoNum * cuotasCountNum)}
