@@ -1594,7 +1594,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={newSplitAmounts[k] ?? 0} min="0" step="1"
+                  <input type="number" value={newSplitAmounts[k] || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleNewAmount(k, e.target.value)} />
                 </div>
@@ -1632,7 +1632,7 @@ export default function GastosPage() {
                   {labels[k]}
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
-                  <input type="number" value={pct} min="0" max="100" step="0.1"
+                  <input type="number" value={pct || ''} min="0" max="100" step="0.1"
                     style={{ borderRadius: '8px 0 0 8px', borderRight: 'none' }}
                     onChange={e => handleNewPercent(k, e.target.value)} />
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: 'none', borderRadius: '0 8px 8px 0', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>%</span>
@@ -1689,7 +1689,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={baseAmt} min="0" step="1"
+                  <input type="number" value={baseAmt || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleNewBaseAmt(k, e.target.value)} />
                 </div>
@@ -1738,7 +1738,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={pre} min="0" step="1"
+                  <input type="number" value={pre || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleNewPreAmt(k, e.target.value)} />
                 </div>
@@ -1779,7 +1779,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={editAmounts[k] ?? 0} min="0" step="1"
+                  <input type="number" value={editAmounts[k] || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleEditAmount(k, e.target.value, expense)} />
                 </div>
@@ -1817,7 +1817,7 @@ export default function GastosPage() {
                   {labels[k]}
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
-                  <input type="number" value={pct} min="0" max="100" step="0.1"
+                  <input type="number" value={pct || ''} min="0" max="100" step="0.1"
                     style={{ borderRadius: '8px 0 0 8px', borderRight: 'none' }}
                     onChange={e => handleEditPercent(k, e.target.value, expense)} />
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: 'none', borderRadius: '0 8px 8px 0', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>%</span>
@@ -1874,7 +1874,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={baseAmt} min="0" step="1"
+                  <input type="number" value={baseAmt || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleEditBaseAmt(k, e.target.value, expense)} />
                 </div>
@@ -1923,7 +1923,7 @@ export default function GastosPage() {
                 </span>
                 <div style={{ display: 'flex', flex: 1 }}>
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                  <input type="number" value={pre} min="0" step="1"
+                  <input type="number" value={pre || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
                     onChange={e => handleEditPreAmt(k, e.target.value)} />
                 </div>
@@ -2444,10 +2444,12 @@ export default function GastosPage() {
       {previewShare !== null && !advancedCharges && (
         <div style={{ marginTop: 8 }}>
           <button onClick={() => setSplitPanelOpen(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: '.82rem', color: 'var(--text-muted)', fontFamily: 'inherit', width: '100%', textAlign: 'left' }}>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: '.82rem', color: 'var(--text-muted)', fontFamily: 'inherit', textAlign: 'left' }}>
             <i className={`bi ${splitPanelOpen ? 'bi-chevron-up' : 'bi-chevron-down'}`} style={{ fontSize: '.7rem', opacity: .6 }} />
-            <span>{previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno</span>
-            <span style={{ marginLeft: 'auto', color: 'var(--gold2)', fontWeight: 600 }}>Editar repartición</span>
+            <span>
+              {previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno{' '}
+              <span style={{ color: 'var(--gold2)', fontWeight: 600 }}>· Editar repartición</span>
+            </span>
           </button>
 
           {splitPanelOpen && (
