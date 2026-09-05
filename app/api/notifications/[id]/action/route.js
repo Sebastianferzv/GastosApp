@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import sql from '@/lib/db';
+import { resolveStaleNotifications } from '@/lib/notifications';
 
 export async function POST(request, { params }) {
   const session = await getSession();
@@ -19,6 +20,7 @@ export async function POST(request, { params }) {
   if (notif.type === 'settle_request' && notif.charge_ids?.length) {
     if (action === 'accept') {
       await sql`UPDATE charges SET paid = TRUE WHERE id = ANY(${notif.charge_ids}) AND paid = FALSE`;
+      await resolveStaleNotifications(notif.charge_ids);
     }
     // reject: los cargos quedan como estaban
   } else if (notif.type === 'charge_paid' && notif.reference_id) {
@@ -37,11 +39,13 @@ export async function POST(request, { params }) {
           const newPaidAmount = parseFloat(Math.min(parseFloat(charge.paid_amount) + partialAmt, charge.amount).toFixed(2));
           if (newPaidAmount >= charge.amount - 0.01) {
             await sql`UPDATE charges SET paid_amount = ${newPaidAmount}, paid = TRUE WHERE id = ${chargeId}`;
+            await resolveStaleNotifications([chargeId]);
           } else {
             await sql`UPDATE charges SET paid_amount = ${newPaidAmount} WHERE id = ${chargeId}`;
           }
         } else {
           await sql`UPDATE charges SET paid = TRUE WHERE id = ${chargeId}`;
+          await resolveStaleNotifications([chargeId]);
         }
       }
       // reject: charge stays unpaid, nothing to do

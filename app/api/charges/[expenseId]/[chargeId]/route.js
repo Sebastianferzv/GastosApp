@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import sql from '@/lib/db';
+import { resolveStaleNotifications } from '@/lib/notifications';
 
 export async function PUT(request, { params }) {
   const session = await getSession();
@@ -17,5 +18,7 @@ export async function PUT(request, { params }) {
   if (!charge) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
   await sql`UPDATE charges SET paid = ${paid} WHERE id = ${chargeId}`;
+  if (paid) await resolveStaleNotifications([parseInt(chargeId)]);
+
   return NextResponse.json({ success: true });
 }

@@ -571,11 +571,13 @@ export default function GastosPage() {
       body: JSON.stringify({ action }),
     });
     if (res.ok) {
-      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
       if (action === 'accept') {
-        await Promise.all([fetchExpenses(), fetchIncoming()]);
+        // Aceptar puede resolver más de un cargo (liquidación) y dejar obsoletas
+        // otras notificaciones pendientes sobre esos mismos cargos: se refresca todo.
+        await Promise.all([fetchExpenses(), fetchIncoming(), fetchNotifications()]);
         showToast('Pago confirmado.', 'success');
       } else {
+        setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, read: true } : n));
         showToast('Solicitud rechazada.', 'info');
       }
     } else {
@@ -951,6 +953,7 @@ export default function GastosPage() {
       body: JSON.stringify({ paid: newPaid }),
     });
     if (!res.ok) { showToast('Error al actualizar.', 'danger'); return; }
+    if (newPaid) await fetchNotifications();
 
     // Optimistic: check if expense will be fully paid
     const expense = expenses.find(e => e.id === expenseId);
@@ -1432,7 +1435,7 @@ export default function GastosPage() {
         })
       ));
       setCompletingResumen(prev => { const n = new Set(prev); n.delete(entry.name); return n; });
-      await fetchExpenses();
+      await Promise.all([fetchExpenses(), fetchNotifications()]);
     }, 900);
   }
 
@@ -2580,7 +2583,15 @@ export default function GastosPage() {
 
             {/* ── Notification bell ── */}
             <div ref={notifMenuRef} style={{ position: 'relative' }}>
-              <button onClick={() => { setShowNotifications(v => !v); setShowUserMenu(false); }}
+              <button onClick={() => {
+                  const opening = !showNotifications;
+                  setShowNotifications(v => !v);
+                  setShowUserMenu(false);
+                  if (opening) {
+                    const idsToRead = notifications.filter(n => !n.read && n.type !== 'charge_paid' && n.type !== 'settle_request').map(n => n.id);
+                    if (idsToRead.length) markNotificationsRead(idsToRead);
+                  }
+                }}
                 style={{ background: 'none', border: '1px solid rgba(201,154,20,.3)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', color: unreadCount > 0 ? 'var(--gold2)' : 'var(--text-muted)', position: 'relative', fontFamily: 'inherit' }}>
                 <i className="bi bi-bell" />
                 {unreadCount > 0 && (
