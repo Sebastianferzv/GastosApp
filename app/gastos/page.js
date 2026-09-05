@@ -44,22 +44,6 @@ function fmtMonth(yyyymm) {
 function fmt(n) { return Math.round(Number(n)).toLocaleString('es-CL'); }
 function personKey(p) { return p.userId ? `f_${p.userId}` : `c_${p.name}`; }
 
-// Misma fórmula que createExpense(): tu parte es el resto automático.
-function splitLikeMainForm(total, keys, availPeople) {
-  if (!keys.length) return { myShare: total, charges: [] };
-  const n = keys.length + 1;
-  const base = Math.round(total / n * 100) / 100;
-  const rem = Math.round((total - base * n) * 100) / 100;
-  const charges = keys.map((key, i) => {
-    const p = availPeople.find(p => p.key === key);
-    return {
-      person: p.name, personUserId: p.userId || null,
-      amount: i === 0 ? Math.round((base + rem) * 100) / 100 : base,
-    };
-  });
-  return { myShare: base, charges };
-}
-
 function loadContacts() {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(localStorage.getItem('contactos') || '[]'); } catch { return []; }
@@ -266,6 +250,7 @@ export default function GastosPage() {
   const [cuotasChargedTo, setCuotasChargedTo] = useState([]);
   const [cuotasStartMonth, setCuotasStartMonth] = useState(todayISO().slice(0, 7));
   const [cuotasSubmitting, setCuotasSubmitting] = useState(false);
+  const [cuotasAmounts, setCuotasAmounts] = useState({}); // key -> $ por persona (editable, por defecto partes iguales)
 
   // Edit installment plan
   const [showEditPlan, setShowEditPlan] = useState(false);
@@ -273,6 +258,8 @@ export default function GastosPage() {
   const [editPlanData, setEditPlanData] = useState(null);
   const [editPlanMonto, setEditPlanMonto] = useState('');
   const [editPlanCount, setEditPlanCount] = useState('');
+  const [editPlanMyShare, setEditPlanMyShare] = useState(0);
+  const [editPlanCharges, setEditPlanCharges] = useState([]);
   const [editPlanSubmitting, setEditPlanSubmitting] = useState(false);
 
   // Edit expense
@@ -484,6 +471,20 @@ export default function GastosPage() {
     resetNewSplitEqual();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newPeopleKeysStr]);
+
+  // Reset the cuotas per-person split to an equal split whenever the people or monto change
+  const cuotasChargedToStr = cuotasChargedTo.join('|');
+  useEffect(() => {
+    const monto = parseFloat(cuotasMonto) || 0;
+    const allKeys = ['tu', ...cuotasChargedTo];
+    const n = allKeys.length;
+    const base = Math.round(monto / n * 100) / 100;
+    const rem = Math.round((monto - base * n) * 100) / 100;
+    const amts = {};
+    allKeys.forEach((k, i) => { amts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    setCuotasAmounts(amts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuotasChargedToStr, cuotasMonto]);
 
   // ── Logout ───────────────────────────────────────────────────────────────────
   async function handleLogout() {
@@ -1035,7 +1036,25 @@ export default function GastosPage() {
     setEditPlanData(data);
     setEditPlanMonto(String(data.monthlyAmount));
     setEditPlanCount(String(data.totalCount));
+    setEditPlanMyShare(data.myShare);
+    setEditPlanCharges(data.charges || []);
     setShowEditPlan(true);
+  }
+
+  // Al cambiar el monto mensual, se vuelve a repartir en partes iguales (editable después)
+  function handleEditPlanMontoChange(rawVal) {
+    setEditPlanMonto(rawVal);
+    const monto = parseFloat(rawVal) || 0;
+    const n = editPlanCharges.length + 1;
+    const base = Math.round(monto / n * 100) / 100;
+    const rem = Math.round((monto - base * n) * 100) / 100;
+    setEditPlanMyShare(Math.round((base + rem) * 100) / 100);
+    setEditPlanCharges(prev => prev.map(c => ({ ...c, amount: base })));
+  }
+
+  function handleEditPlanChargeAmount(idx, rawVal) {
+    const val = Math.max(0, parseFloat(rawVal) || 0);
+    setEditPlanCharges(prev => prev.map((c, i) => i === idx ? { ...c, amount: val } : c));
   }
 
   async function savePlanEdit() {
@@ -1045,11 +1064,14 @@ export default function GastosPage() {
     if (!count || count < editPlanData.createdCount) return showToast(`No puede ser menor a las ${editPlanData.createdCount} cuotas ya creadas.`, 'danger');
     if (count > 60) return showToast('Máximo 60 cuotas.', 'danger');
 
+    const sum = editPlanMyShare + editPlanCharges.reduce((s, c) => s + (c.amount || 0), 0);
+    if (Math.abs(sum - monto) > 0.5) return showToast('La distribución no suma el monto mensual.', 'danger');
+
     setEditPlanSubmitting(true);
     const res = await fetch(`/api/installment-plans/${editPlanId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ monthlyAmount: monto, totalCount: count }),
+      body: JSON.stringify({ monthlyAmount: monto, totalCount: count, myShare: editPlanMyShare, charges: editPlanCharges }),
     });
     setEditPlanSubmitting(false);
 
@@ -2864,12 +2886,47 @@ export default function GastosPage() {
               <div style={{ display: 'flex', marginBottom: 12 }}>
                 <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
                 <input type="number" min="1" step="1" value={editPlanMonto}
-                  onChange={e => setEditPlanMonto(e.target.value)}
+                  onChange={e => handleEditPlanMontoChange(e.target.value)}
                   style={{ flex: 1, borderRadius: '0 8px 8px 0', borderLeft: 'none' }} />
               </div>
               <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Cantidad total de cuotas</label>
               <input type="number" min={editPlanData.createdCount} max="60" step="1" value={editPlanCount}
                 onChange={e => setEditPlanCount(e.target.value)} />
+
+              <label style={{ fontSize: '.8rem', color: 'var(--text-muted)', display: 'block', margin: '16px 0 6px' }}>Repartir monto mensual</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                  <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />Tú
+                </span>
+                <div style={{ display: 'flex', flex: 1 }}>
+                  <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                  <input type="number" value={editPlanMyShare || ''} min="0" step="1"
+                    style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                    onChange={e => setEditPlanMyShare(Math.max(0, parseFloat(e.target.value) || 0))} />
+                </div>
+              </div>
+              {editPlanCharges.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>{c.person}</span>
+                  <div style={{ display: 'flex', flex: 1 }}>
+                    <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                    <input type="number" value={c.amount || ''} min="0" step="1"
+                      style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                      onChange={e => handleEditPlanChargeAmount(i, e.target.value)} />
+                  </div>
+                </div>
+              ))}
+              {(() => {
+                const monto = parseFloat(editPlanMonto) || 0;
+                const sum = editPlanMyShare + editPlanCharges.reduce((s, c) => s + (c.amount || 0), 0);
+                const ok = Math.abs(sum - monto) < 0.5;
+                return (
+                  <div style={{ fontSize: '.78rem', textAlign: 'right', marginBottom: 4, color: ok ? '#34d399' : '#f87171' }}>
+                    ${fmt(sum)} / ${fmt(monto)} {ok ? '✓' : '⚠ no coincide'}
+                  </div>
+                );
+              })()}
+
               <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 10 }}>
                 Los cambios solo aplican a las cuotas que faltan por generarse.
               </p>
@@ -3350,7 +3407,7 @@ export default function GastosPage() {
         const cuotasMontoNum = parseFloat(cuotasMonto) || 0;
         const cuotasCountNum = parseInt(cuotasCount, 10) || 0;
         const cuotasStartDay = Number(todayISO().slice(8, 10));
-        const { myShare: cuotasPreviewMyShare } = splitLikeMainForm(cuotasMontoNum, cuotasChargedTo, cuotasAvailPeople);
+        const cuotasPreviewMyShare = cuotasAmounts['tu'] || 0;
 
         const applyCuotas = async () => {
           const name = cuotasName.trim();
@@ -3363,7 +3420,14 @@ export default function GastosPage() {
           if (count > 60) return showToast('Máximo 60 cuotas.', 'danger');
           if (cuotasStartMonth < todayISO().slice(0, 7)) return showToast('El mes de inicio no puede ser anterior al mes actual.', 'danger');
 
-          const { myShare, charges } = splitLikeMainForm(monto, cuotasChargedTo, cuotasAvailPeople);
+          const allKeys = ['tu', ...cuotasChargedTo];
+          const sumAmt = allKeys.reduce((s, k) => s + (cuotasAmounts[k] || 0), 0);
+          if (Math.abs(sumAmt - monto) > 0.5) return showToast('La distribución no suma el monto mensual.', 'danger');
+          const myShare = cuotasAmounts['tu'] || 0;
+          const charges = cuotasChargedTo.map(k => {
+            const p = cuotasAvailPeople.find(p => p.key === k);
+            return { person: p.name, personUserId: p.userId || null, amount: cuotasAmounts[k] || 0 };
+          });
           const startDay = Number(todayISO().slice(8, 10));
 
           setCuotasSubmitting(true);
@@ -3550,6 +3614,48 @@ export default function GastosPage() {
                         onOtro={() => handleOtroClick({ type: 'cuotas' })}
                       />
                     </div>
+
+                    {cuotasChargedTo.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: '.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Repartir monto mensual</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                            <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />Tú
+                          </span>
+                          <div style={{ display: 'flex', flex: 1 }}>
+                            <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                            <input type="number" value={cuotasAmounts['tu'] || ''} min="0" step="1"
+                              style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                              onChange={e => setCuotasAmounts(prev => ({ ...prev, tu: Math.max(0, parseFloat(e.target.value) || 0) }))} />
+                          </div>
+                        </div>
+                        {cuotasChargedTo.map(key => {
+                          const p = cuotasAvailPeople.find(p => p.key === key);
+                          if (!p) return null;
+                          return (
+                            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                              <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>{p.name}</span>
+                              <div style={{ display: 'flex', flex: 1 }}>
+                                <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                                <input type="number" value={cuotasAmounts[key] || ''} min="0" step="1"
+                                  style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                                  onChange={e => setCuotasAmounts(prev => ({ ...prev, [key]: Math.max(0, parseFloat(e.target.value) || 0) }))} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {(() => {
+                          const allKeys = ['tu', ...cuotasChargedTo];
+                          const sum = allKeys.reduce((s, k) => s + (cuotasAmounts[k] || 0), 0);
+                          const ok = Math.abs(sum - cuotasMontoNum) < 0.5;
+                          return (
+                            <div style={{ fontSize: '.78rem', textAlign: 'right', color: ok ? '#34d399' : '#f87171' }}>
+                              ${fmt(sum)} / ${fmt(cuotasMontoNum)} {ok ? '✓' : '⚠ no coincide'}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
 
                     {cuotasMontoNum > 0 && cuotasCountNum >= 1 && (
                       <div style={{ background: 'rgba(201,154,20,.06)', border: '1px solid rgba(201,154,20,.15)', borderRadius: 10, padding: '12px 14px', fontSize: '.85rem' }}>

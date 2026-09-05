@@ -19,11 +19,14 @@ export async function GET(request, { params }) {
     GROUP BY e.id
   `;
   const paidCount = rows.filter(r => r.charges.length === 0 || r.charges.every(c => c.paid)).length;
+  const charges = typeof plan.charges === 'string' ? JSON.parse(plan.charges) : plan.charges;
 
   return NextResponse.json({
     id: plan.id,
     name: plan.name,
     monthlyAmount: Number(plan.monthly_amount),
+    myShare: Number(plan.my_share),
+    charges,
     totalCount: plan.total_count,
     createdCount: plan.created_count,
     paidCount,
@@ -38,14 +41,17 @@ export async function PUT(request, { params }) {
   const [plan] = await sql`SELECT * FROM installment_plans WHERE id = ${id} AND user_id = ${session.userId}`;
   if (!plan) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-  const { monthlyAmount, totalCount } = await request.json();
+  const { monthlyAmount, totalCount, myShare, charges } = await request.json();
   if (!monthlyAmount || monthlyAmount <= 0) return NextResponse.json({ error: 'El monto mensual debe ser mayor a 0.' }, { status: 400 });
   if (!totalCount || totalCount < plan.created_count) {
     return NextResponse.json({ error: `No puede ser menor a las ${plan.created_count} cuotas ya creadas.` }, { status: 400 });
   }
   if (totalCount > 60) return NextResponse.json({ error: 'Máximo 60 cuotas.' }, { status: 400 });
 
-  await sql`UPDATE installment_plans SET monthly_amount = ${monthlyAmount}, total_count = ${totalCount} WHERE id = ${id}`;
+  const newMyShare = myShare ?? plan.my_share;
+  const newCharges = charges ?? (typeof plan.charges === 'string' ? JSON.parse(plan.charges) : plan.charges);
+
+  await sql`UPDATE installment_plans SET monthly_amount = ${monthlyAmount}, total_count = ${totalCount}, my_share = ${newMyShare}, charges = ${JSON.stringify(newCharges)} WHERE id = ${id}`;
 
   return NextResponse.json({ ok: true });
 }
