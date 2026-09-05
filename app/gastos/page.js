@@ -251,6 +251,7 @@ export default function GastosPage() {
   const [cuotasStartMonth, setCuotasStartMonth] = useState(todayISO().slice(0, 7));
   const [cuotasSubmitting, setCuotasSubmitting] = useState(false);
   const [cuotasAmounts, setCuotasAmounts] = useState({}); // key -> $ por persona (editable, por defecto partes iguales)
+  const [cuotasLockedKeys, setCuotasLockedKeys] = useState(new Set());
 
   // Edit installment plan
   const [showEditPlan, setShowEditPlan] = useState(false);
@@ -260,6 +261,7 @@ export default function GastosPage() {
   const [editPlanCount, setEditPlanCount] = useState('');
   const [editPlanMyShare, setEditPlanMyShare] = useState(0);
   const [editPlanCharges, setEditPlanCharges] = useState([]);
+  const [editPlanLockedKeys, setEditPlanLockedKeys] = useState(new Set());
   const [editPlanSubmitting, setEditPlanSubmitting] = useState(false);
 
   // Edit expense
@@ -483,6 +485,7 @@ export default function GastosPage() {
     const amts = {};
     allKeys.forEach((k, i) => { amts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
     setCuotasAmounts(amts);
+    setCuotasLockedKeys(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cuotasChargedToStr, cuotasMonto]);
 
@@ -882,6 +885,63 @@ export default function GastosPage() {
     });
   }
 
+  // ── Cuotas per-person amount (create flow) — same redistribute-on-edit as "Monto" tab ──
+  function handleCuotasAmount(key, rawVal) {
+    const total = parseFloat(cuotasMonto) || 0;
+    const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, total));
+    const allKeys = ['tu', ...cuotasChargedTo];
+    const fixedSet = new Set([key, ...cuotasLockedKeys]);
+    const toUpdate = allKeys.filter(k => !fixedSet.has(k));
+    const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (cuotasAmounts[k] || 0)), 0);
+    const remaining = Math.max(0, total - fixedSum);
+
+    const newAmts = { ...cuotasAmounts, [key]: val };
+    if (toUpdate.length > 0) {
+      const base = Math.round(remaining / toUpdate.length * 100) / 100;
+      const rem = Math.round((remaining - base * toUpdate.length) * 100) / 100;
+      toUpdate.forEach((k, i) => { newAmts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    }
+    setCuotasAmounts(newAmts);
+  }
+
+  function toggleCuotasLock(key) {
+    setCuotasLockedKeys(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  // ── Edit-plan per-person amount — same redistribute-on-edit as "Monto" tab ───────────
+  function handleEditPlanAmount(key, rawVal) {
+    const total = parseFloat(editPlanMonto) || 0;
+    const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, total));
+    const allKeys = ['tu', ...editPlanCharges.map((_, i) => String(i))];
+    const currentVal = k => k === 'tu' ? (editPlanMyShare || 0) : (editPlanCharges[Number(k)]?.amount || 0);
+    const fixedSet = new Set([key, ...editPlanLockedKeys]);
+    const toUpdate = allKeys.filter(k => !fixedSet.has(k));
+    const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : currentVal(k)), 0);
+    const remaining = Math.max(0, total - fixedSum);
+
+    const newVals = {};
+    allKeys.forEach(k => { newVals[k] = k === key ? val : currentVal(k); });
+    if (toUpdate.length > 0) {
+      const base = Math.round(remaining / toUpdate.length * 100) / 100;
+      const rem = Math.round((remaining - base * toUpdate.length) * 100) / 100;
+      toUpdate.forEach((k, i) => { newVals[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    }
+    setEditPlanMyShare(newVals['tu']);
+    setEditPlanCharges(prev => prev.map((c, i) => ({ ...c, amount: newVals[String(i)] })));
+  }
+
+  function toggleEditPlanLock(key) {
+    setEditPlanLockedKeys(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
   // ── Toggle charge (paid/unpaid) ──────────────────────────────────────────────
   async function toggleCharge(expenseId, chargeId, currentPaid) {
     const newPaid = !currentPaid;
@@ -1038,6 +1098,7 @@ export default function GastosPage() {
     setEditPlanCount(String(data.totalCount));
     setEditPlanMyShare(data.myShare);
     setEditPlanCharges(data.charges || []);
+    setEditPlanLockedKeys(new Set());
     setShowEditPlan(true);
   }
 
@@ -1050,11 +1111,7 @@ export default function GastosPage() {
     const rem = Math.round((monto - base * n) * 100) / 100;
     setEditPlanMyShare(Math.round((base + rem) * 100) / 100);
     setEditPlanCharges(prev => prev.map(c => ({ ...c, amount: base })));
-  }
-
-  function handleEditPlanChargeAmount(idx, rawVal) {
-    const val = Math.max(0, parseFloat(rawVal) || 0);
-    setEditPlanCharges(prev => prev.map((c, i) => i === idx ? { ...c, amount: val } : c));
+    setEditPlanLockedKeys(new Set());
   }
 
   async function savePlanEdit() {
@@ -2902,20 +2959,34 @@ export default function GastosPage() {
                   <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
                   <input type="number" value={editPlanMyShare || ''} min="0" step="1"
                     style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                    onChange={e => setEditPlanMyShare(Math.max(0, parseFloat(e.target.value) || 0))} />
+                    onChange={e => handleEditPlanAmount('tu', e.target.value)} />
                 </div>
+                <button onClick={() => toggleEditPlanLock('tu')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: editPlanLockedKeys.has('tu') ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                  title={editPlanLockedKeys.has('tu') ? 'Desbloquear' : 'Fijar valor'}>
+                  <i className={`bi ${editPlanLockedKeys.has('tu') ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                </button>
               </div>
-              {editPlanCharges.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>{c.person}</span>
-                  <div style={{ display: 'flex', flex: 1 }}>
-                    <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
-                    <input type="number" value={c.amount || ''} min="0" step="1"
-                      style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                      onChange={e => handleEditPlanChargeAmount(i, e.target.value)} />
+              {editPlanCharges.map((c, i) => {
+                const key = String(i);
+                const locked = editPlanLockedKeys.has(key);
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>{c.person}</span>
+                    <div style={{ display: 'flex', flex: 1 }}>
+                      <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                      <input type="number" value={c.amount || ''} min="0" step="1"
+                        style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                        onChange={e => handleEditPlanAmount(key, e.target.value)} />
+                    </div>
+                    <button onClick={() => toggleEditPlanLock(key)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: locked ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                      title={locked ? 'Desbloquear' : 'Fijar valor'}>
+                      <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {(() => {
                 const monto = parseFloat(editPlanMonto) || 0;
                 const sum = editPlanMyShare + editPlanCharges.reduce((s, c) => s + (c.amount || 0), 0);
@@ -3626,12 +3697,18 @@ export default function GastosPage() {
                             <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
                             <input type="number" value={cuotasAmounts['tu'] || ''} min="0" step="1"
                               style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                              onChange={e => setCuotasAmounts(prev => ({ ...prev, tu: Math.max(0, parseFloat(e.target.value) || 0) }))} />
+                              onChange={e => handleCuotasAmount('tu', e.target.value)} />
                           </div>
+                          <button onClick={() => toggleCuotasLock('tu')}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: cuotasLockedKeys.has('tu') ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                            title={cuotasLockedKeys.has('tu') ? 'Desbloquear' : 'Fijar valor'}>
+                            <i className={`bi ${cuotasLockedKeys.has('tu') ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                          </button>
                         </div>
                         {cuotasChargedTo.map(key => {
                           const p = cuotasAvailPeople.find(p => p.key === key);
                           if (!p) return null;
+                          const locked = cuotasLockedKeys.has(key);
                           return (
                             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                               <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>{p.name}</span>
@@ -3639,8 +3716,13 @@ export default function GastosPage() {
                                 <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
                                 <input type="number" value={cuotasAmounts[key] || ''} min="0" step="1"
                                   style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-                                  onChange={e => setCuotasAmounts(prev => ({ ...prev, [key]: Math.max(0, parseFloat(e.target.value) || 0) }))} />
+                                  onChange={e => handleCuotasAmount(key, e.target.value)} />
                               </div>
+                              <button onClick={() => toggleCuotasLock(key)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: locked ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                                title={locked ? 'Desbloquear' : 'Fijar valor'}>
+                                <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                              </button>
                             </div>
                           );
                         })}
