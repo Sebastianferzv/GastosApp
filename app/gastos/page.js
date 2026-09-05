@@ -42,6 +42,7 @@ function fmtMonth(yyyymm) {
   return `${MONTHS_ES[parseInt(m) - 1]} ${y}`;
 }
 function fmt(n) { return Math.round(Number(n)).toLocaleString('es-CL'); }
+function personKey(p) { return p.userId ? `f_${p.userId}` : `c_${p.name}`; }
 
 // Misma fórmula que createExpense(): tu parte es el resto automático.
 function splitLikeMainForm(total, keys, availPeople) {
@@ -240,6 +241,16 @@ export default function GastosPage() {
   const [selectedPeople, setSelectedPeople] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const peopleWrapRef = useRef(null);
+  // New-expense split editor ("Editar repartición")
+  const [splitPanelOpen, setSplitPanelOpen] = useState(false);
+  const [newSplitTab, setNewSplitTab] = useState('monto');
+  const [newSplitAmounts, setNewSplitAmounts] = useState({});
+  const [newSplitPercents, setNewSplitPercents] = useState({});
+  const [newSplitBaseAmts, setNewSplitBaseAmts] = useState({});
+  const [newSplitPreAmts, setNewSplitPreAmts] = useState({});
+  const [newSplitTipPct, setNewSplitTipPct] = useState(10);
+  const [newLockedKeys, setNewLockedKeys] = useState(new Set());
+  const [newConfirmReset, setNewConfirmReset] = useState(false);
   // Advanced expense builder
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [advancedItems, setAdvancedItems] = useState([{ id: 1, name: '', cost: '', chargedTo: [] }]);
@@ -467,6 +478,13 @@ export default function GastosPage() {
     if (activeGroup) msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [groupMessages, activeGroup]);
 
+  // Reset the new-expense split editor to an equal split whenever the selected people change
+  const newPeopleKeysStr = selectedPeople.map(personKey).join('|');
+  useEffect(() => {
+    resetNewSplitEqual();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newPeopleKeysStr]);
+
   // ── Logout ───────────────────────────────────────────────────────────────────
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -648,15 +666,45 @@ export default function GastosPage() {
       myShare = 0;
       charges = [{ person: selectedPeople[0].name, personUserId: selectedPeople[0].userId || null, amount: total }];
     } else {
-      const n = selectedPeople.length + 1;
-      const base = Math.round(total / n * 100) / 100;
-      const rem = Math.round((total - base * n) * 100) / 100;
-      myShare = base;
-      charges = selectedPeople.map((p, i) => ({
-        person: p.name,
-        personUserId: p.userId || null,
-        amount: i === 0 ? Math.round((base + rem) * 100) / 100 : base,
-      }));
+      const allKeys = ['tu', ...selectedPeople.map(personKey)];
+      if (newSplitTab === 'monto') {
+        const sumAmt = allKeys.reduce((s, k) => s + (newSplitAmounts[k] || 0), 0);
+        if (Math.abs(sumAmt - total) > 0.05) return showToast('La distribución no suma el total.', 'danger');
+        myShare = newSplitAmounts['tu'] || 0;
+        charges = selectedPeople.map(p => ({ person: p.name, personUserId: p.userId || null, amount: newSplitAmounts[personKey(p)] || 0 }));
+      } else if (newSplitTab === 'porcentaje') {
+        const sumPct = allKeys.reduce((s, k) => s + (newSplitPercents[k] || 0), 0);
+        if (Math.abs(sumPct - 100) > 0.6) return showToast('Los porcentajes no suman 100%.', 'danger');
+        let chargeSum = 0;
+        charges = selectedPeople.map(p => {
+          const amt = Math.round(total * (newSplitPercents[personKey(p)] || 0) / 100 * 100) / 100;
+          chargeSum += amt;
+          return { person: p.name, personUserId: p.userId || null, amount: amt };
+        });
+        myShare = Math.round((total - chargeSum) * 100) / 100;
+      } else if (newSplitTab === 'propina') {
+        const base = total / (1 + newSplitTipPct / 100);
+        const sumBase = allKeys.reduce((s, k) => s + (newSplitBaseAmts[k] || 0), 0);
+        if (Math.abs(sumBase - base) > 1) return showToast('Las bases no suman el monto sin propina.', 'danger');
+        let chargeSum = 0;
+        charges = selectedPeople.map(p => {
+          const amt = Math.round((newSplitBaseAmts[personKey(p)] || 0) * (1 + newSplitTipPct / 100) * 100) / 100;
+          chargeSum += amt;
+          return { person: p.name, personUserId: p.userId || null, amount: amt };
+        });
+        myShare = Math.round((total - chargeSum) * 100) / 100;
+      } else if (newSplitTab === 'descuento') {
+        const preTotal = allKeys.reduce((s, k) => s + (newSplitPreAmts[k] || 0), 0);
+        if (preTotal <= total + 0.01) return showToast('La suma sin descuento debe ser mayor al total final.', 'danger');
+        const discFactor = total / preTotal;
+        let chargeSum = 0;
+        charges = selectedPeople.map(p => {
+          const amt = Math.round((newSplitPreAmts[personKey(p)] || 0) * discFactor * 100) / 100;
+          chargeSum += amt;
+          return { person: p.name, personUserId: p.userId || null, amount: amt };
+        });
+        myShare = Math.round((total - chargeSum) * 100) / 100;
+      }
     }
 
     const res = await fetch('/api/expenses', {
@@ -675,12 +723,162 @@ export default function GastosPage() {
       setAdvancedItems([{ id: 1, name: '', cost: '', chargedTo: [] }]);
       setTipApplied(false);
       setAdvancedTab('items');
+      setSplitPanelOpen(false);
+      setNewSplitTab('monto');
+      setNewSplitAmounts({});
+      setNewSplitPercents({});
+      setNewSplitBaseAmts({});
+      setNewSplitPreAmts({});
+      setNewSplitTipPct(10);
+      setNewLockedKeys(new Set());
       await fetchExpenses();
       showToast(`Gasto "${name}" creado.`, 'success');
     } else {
       const d = await res.json();
       showToast(d.error || 'Error al crear el gasto.', 'danger');
     }
+  }
+
+  // ── New expense split editor ("Editar repartición") ──────────────────────────
+  function resetNewSplitEqual() {
+    const total = parseFloat(formTotal) || 0;
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const n = allKeys.length;
+    const base = Math.round(total / n * 100) / 100;
+    const rem = Math.round((total - base * n) * 100) / 100;
+    const newAmts = {};
+    allKeys.forEach((k, i) => { newAmts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    setNewSplitAmounts(newAmts);
+    setNewLockedKeys(new Set());
+    setNewSplitTab('monto');
+  }
+
+  function handleNewTotalChange(rawVal) {
+    const total = Math.max(0, parseFloat(rawVal) || 0);
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const n = allKeys.length;
+    const bm = Math.round(total / n * 100) / 100;
+    const rm = Math.round((total - bm * n) * 100) / 100;
+    const newAmts = {};
+    allKeys.forEach((k, i) => { newAmts[k] = i === 0 ? Math.round((bm + rm) * 100) / 100 : bm; });
+    setNewSplitAmounts(newAmts);
+    setNewLockedKeys(new Set());
+
+    const base2 = Math.round(total / (1 + newSplitTipPct / 100) * 100) / 100;
+    const bpp = Math.round(base2 / n * 100) / 100;
+    const brr = Math.round((base2 - bpp * n) * 100) / 100;
+    const newBaseAmts = {};
+    allKeys.forEach((k, i) => { newBaseAmts[k] = i === 0 ? Math.round((bpp + brr) * 100) / 100 : bpp; });
+    setNewSplitBaseAmts(newBaseAmts);
+  }
+
+  function switchNewSplitTab(tab) {
+    if (tab === newSplitTab) return;
+    const total = parseFloat(formTotal) || 0;
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const n = allKeys.length;
+
+    if (tab === 'porcentaje') {
+      const pcts = {};
+      allKeys.forEach(k => { pcts[k] = total > 0 ? Math.round((newSplitAmounts[k] || 0) / total * 100 * 10) / 10 : Math.round(100 / n * 10) / 10; });
+      const sp = allKeys.reduce((s, k) => s + pcts[k], 0);
+      pcts['tu'] = Math.round((pcts['tu'] + (100 - sp)) * 10) / 10;
+      setNewSplitPercents(pcts);
+    } else if (tab === 'propina') {
+      const base = Math.round(total / (1 + newSplitTipPct / 100) * 100) / 100;
+      const bp = Math.round(base / n * 100) / 100;
+      const br = Math.round((base - bp * n) * 100) / 100;
+      const baseAmts = {};
+      allKeys.forEach((k, i) => { baseAmts[k] = i === 0 ? Math.round((bp + br) * 100) / 100 : bp; });
+      setNewSplitBaseAmts(baseAmts);
+    } else if (tab === 'descuento') {
+      const preAmts = {};
+      allKeys.forEach(k => { preAmts[k] = newSplitAmounts[k] || 0; });
+      setNewSplitPreAmts(preAmts);
+    }
+    setNewLockedKeys(new Set());
+    setNewSplitTab(tab);
+  }
+
+  function handleNewAmount(key, rawVal) {
+    const total = parseFloat(formTotal) || 0;
+    const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, total));
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const fixedSet = new Set([key, ...newLockedKeys]);
+    const toUpdate = allKeys.filter(k => !fixedSet.has(k));
+    const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (newSplitAmounts[k] || 0)), 0);
+    const remaining = Math.max(0, total - fixedSum);
+
+    const newAmts = { ...newSplitAmounts, [key]: val };
+    if (toUpdate.length > 0) {
+      const base = Math.round(remaining / toUpdate.length * 100) / 100;
+      const rem = Math.round((remaining - base * toUpdate.length) * 100) / 100;
+      toUpdate.forEach((k, i) => { newAmts[k] = i === 0 ? Math.round((base + rem) * 100) / 100 : base; });
+    }
+    setNewSplitAmounts(newAmts);
+  }
+
+  function handleNewPercent(key, rawVal) {
+    const val = Math.max(0, Math.min(100, parseFloat(rawVal) || 0));
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const fixedSet = new Set([key, ...newLockedKeys]);
+    const toUpdate = allKeys.filter(k => !fixedSet.has(k));
+    const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (newSplitPercents[k] || 0)), 0);
+    const remaining = Math.max(0, 100 - fixedSum);
+
+    const newPcts = { ...newSplitPercents, [key]: val };
+    if (toUpdate.length > 0) {
+      const base = Math.round(remaining / toUpdate.length * 10) / 10;
+      const rem = Math.round((remaining - base * toUpdate.length) * 10) / 10;
+      toUpdate.forEach((k, i) => { newPcts[k] = i === 0 ? Math.round((base + rem) * 10) / 10 : base; });
+    }
+    setNewSplitPercents(newPcts);
+  }
+
+  function handleNewBaseAmt(key, rawVal) {
+    const total = parseFloat(formTotal) || 0;
+    const base = Math.round(total / (1 + newSplitTipPct / 100) * 100) / 100;
+    const val = Math.max(0, Math.min(parseFloat(rawVal) || 0, base));
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const fixedSet = new Set([key, ...newLockedKeys]);
+    const toUpdate = allKeys.filter(k => !fixedSet.has(k));
+    const fixedSum = allKeys.filter(k => fixedSet.has(k)).reduce((s, k) => s + (k === key ? val : (newSplitBaseAmts[k] || 0)), 0);
+    const remaining = Math.max(0, base - fixedSum);
+
+    const newBaseAmts = { ...newSplitBaseAmts, [key]: val };
+    if (toUpdate.length > 0) {
+      const bp = Math.round(remaining / toUpdate.length * 100) / 100;
+      const br = Math.round((remaining - bp * toUpdate.length) * 100) / 100;
+      toUpdate.forEach((k, i) => { newBaseAmts[k] = i === 0 ? Math.round((bp + br) * 100) / 100 : bp; });
+    }
+    setNewSplitBaseAmts(newBaseAmts);
+  }
+
+  function handleNewPreAmt(key, rawVal) {
+    const val = Math.max(0, parseFloat(rawVal) || 0);
+    setNewSplitPreAmts(prev => ({ ...prev, [key]: val }));
+  }
+
+  function handleNewTipPct(rawVal) {
+    const pct = Math.max(0, Math.min(99, parseFloat(rawVal) || 0));
+    setNewSplitTipPct(pct);
+    const total = parseFloat(formTotal) || 0;
+    const base = Math.round(total / (1 + pct / 100) * 100) / 100;
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const n = allKeys.length;
+    const bp = Math.round(base / n * 100) / 100;
+    const br = Math.round((base - bp * n) * 100) / 100;
+    const newBaseAmts = {};
+    allKeys.forEach((k, i) => { newBaseAmts[k] = i === 0 ? Math.round((bp + br) * 100) / 100 : bp; });
+    setNewSplitBaseAmts(newBaseAmts);
+  }
+
+  function toggleNewLock(key) {
+    setNewLockedKeys(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   }
 
   // ── Toggle charge (paid/unpaid) ──────────────────────────────────────────────
@@ -1371,6 +1569,191 @@ export default function GastosPage() {
   const pendingFriends = friends.filter(f => f.status === 'pending' && f.direction === 'received');
   const sentFriends = friends.filter(f => f.status === 'pending' && f.direction === 'sent');
 
+  // ── Render: New-expense split editor tab content ─────────────────────────────
+  function renderNewSplitTabContent() {
+    const total = parseFloat(formTotal) || 0;
+    const allKeys = ['tu', ...selectedPeople.map(personKey)];
+    const labels = { tu: 'Tú' };
+    selectedPeople.forEach(p => { labels[personKey(p)] = p.name; });
+
+    if (newSplitTab === 'monto') {
+      const sumEdit = allKeys.reduce((s, k) => s + (newSplitAmounts[k] || 0), 0);
+      const sumOk = Math.abs(sumEdit - total) < 0.05;
+      return (
+        <div>
+          <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: 10 }}>
+            Ingrese cuánto paga cada persona
+          </p>
+          {allKeys.map(k => {
+            const locked = newLockedKeys.has(k);
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                  {k === 'tu' && <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />}
+                  {labels[k]}
+                </span>
+                <div style={{ display: 'flex', flex: 1 }}>
+                  <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                  <input type="number" value={newSplitAmounts[k] ?? 0} min="0" step="1"
+                    style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                    onChange={e => handleNewAmount(k, e.target.value)} />
+                </div>
+                <button onClick={() => toggleNewLock(k)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: locked ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                  title={locked ? 'Desbloquear' : 'Fijar valor'}>
+                  <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                </button>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: '.78rem', textAlign: 'right', marginTop: 6, color: sumOk ? '#34d399' : '#f87171' }}>
+            ${fmt(Math.round(sumEdit * 100) / 100)} / ${fmt(total)} {sumOk ? '✓' : '⚠ no coincide'}
+          </div>
+        </div>
+      );
+    }
+
+    if (newSplitTab === 'porcentaje') {
+      const sumPct = allKeys.reduce((s, k) => s + (newSplitPercents[k] || 0), 0);
+      const sumOk = Math.abs(sumPct - 100) < 0.6;
+      return (
+        <div>
+          <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: 10 }}>
+            Ingrese el porcentaje que paga cada persona
+          </p>
+          {allKeys.map(k => {
+            const locked = newLockedKeys.has(k);
+            const pct = newSplitPercents[k] ?? Math.round(100 / allKeys.length * 10) / 10;
+            const amt = Math.round(total * pct / 100 * 100) / 100;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                  {k === 'tu' && <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />}
+                  {labels[k]}
+                </span>
+                <div style={{ display: 'flex', flex: 1 }}>
+                  <input type="number" value={pct} min="0" max="100" step="0.1"
+                    style={{ borderRadius: '8px 0 0 8px', borderRight: 'none' }}
+                    onChange={e => handleNewPercent(k, e.target.value)} />
+                  <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: 'none', borderRadius: '0 8px 8px 0', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>%</span>
+                </div>
+                <span style={{ minWidth: 60, textAlign: 'right', fontSize: '.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  ${fmt(amt)}
+                </span>
+                <button onClick={() => toggleNewLock(k)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: locked ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                  title={locked ? 'Desbloquear' : 'Fijar valor'}>
+                  <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                </button>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: '.78rem', textAlign: 'right', marginTop: 6, color: sumOk ? '#34d399' : '#f87171' }}>
+            {fmt(Math.round(sumPct * 10) / 10)}% / 100% {sumOk ? '✓' : '⚠ no coincide'}
+          </div>
+        </div>
+      );
+    }
+
+    if (newSplitTab === 'propina') {
+      const base = Math.round(total / (1 + newSplitTipPct / 100) * 100) / 100;
+      const tipAmt = Math.round((total - base) * 100) / 100;
+      const sumBase = allKeys.reduce((s, k) => s + (newSplitBaseAmts[k] || 0), 0);
+      const baseOk = Math.abs(sumBase - base) < 0.6;
+      return (
+        <div>
+          <p style={{ fontSize: '.78rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: 10 }}>
+            Ingrese los montos originales antes de agregar propina
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '.82rem', flexShrink: 0 }}>Propina</span>
+            <div style={{ display: 'flex', maxWidth: 90 }}>
+              <input type="number" value={newSplitTipPct} min="0" max="99" step="1"
+                style={{ borderRadius: '8px 0 0 8px', borderRight: 'none' }}
+                onChange={e => handleNewTipPct(e.target.value)} />
+              <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderLeft: 'none', borderRadius: '0 8px 8px 0', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>%</span>
+            </div>
+            <span style={{ fontSize: '.78rem', color: 'var(--text-muted)' }}>
+              Sin propina ${fmt(base)} · Propina ${fmt(tipAmt)}
+            </span>
+          </div>
+          {allKeys.map(k => {
+            const locked = newLockedKeys.has(k);
+            const baseAmt = newSplitBaseAmts[k] ?? Math.round(base / allKeys.length * 100) / 100;
+            const finalAmt = Math.round(baseAmt * (1 + newSplitTipPct / 100) * 100) / 100;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                  {k === 'tu' && <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />}
+                  {labels[k]}
+                </span>
+                <div style={{ display: 'flex', flex: 1 }}>
+                  <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                  <input type="number" value={baseAmt} min="0" step="1"
+                    style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                    onChange={e => handleNewBaseAmt(k, e.target.value)} />
+                </div>
+                <span style={{ minWidth: 60, textAlign: 'right', fontSize: '.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  = ${fmt(finalAmt)}
+                </span>
+                <button onClick={() => toggleNewLock(k)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, color: locked ? '#e8b83c' : 'rgba(255,255,255,.18)' }}
+                  title={locked ? 'Desbloquear' : 'Fijar valor'}>
+                  <i className={`bi ${locked ? 'bi-lock-fill' : 'bi-unlock'}`} style={{ fontSize: '.85rem' }} />
+                </button>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: '.78rem', textAlign: 'right', marginTop: 6, color: baseOk ? '#34d399' : '#f87171' }}>
+            Base: ${fmt(Math.round(sumBase * 100) / 100)} / ${fmt(base)} {baseOk ? '✓' : '⚠ no coincide'}
+          </div>
+        </div>
+      );
+    }
+
+    if (newSplitTab === 'descuento') {
+      const sumPre = allKeys.reduce((s, k) => s + (newSplitPreAmts[k] || 0), 0);
+      const discAmt = Math.max(0, Math.round((sumPre - total) * 100) / 100);
+      const discPct = sumPre > 0 ? Math.round(discAmt / sumPre * 1000) / 10 : 0;
+      const factor = sumPre > 0 ? total / sumPre : 1;
+      const hasDisc = sumPre > total + 0.5;
+      return (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 12, fontSize: '.82rem' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Sin descuento: <strong style={{ color: 'var(--text)' }}>${fmt(sumPre)}</strong></span>
+            <span style={{ color: 'var(--text-muted)' }}>Total final: <strong style={{ color: 'var(--text)' }}>${fmt(total)}</strong></span>
+            {hasDisc
+              ? <span style={{ color: '#e8b83c' }}>Descuento: <strong>${fmt(discAmt)} ({discPct}%)</strong></span>
+              : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Ingrese los montos originales antes de descuento por persona</span>
+            }
+          </div>
+          {allKeys.map(k => {
+            const pre = newSplitPreAmts[k] ?? 0;
+            const finalAmt = Math.round(pre * factor * 100) / 100;
+            return (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ minWidth: 90, color: 'var(--text-muted)', fontSize: '.85rem', flexShrink: 0 }}>
+                  {k === 'tu' && <i className="bi bi-person-fill" style={{ opacity: .35, marginRight: 4 }} />}
+                  {labels[k]}
+                </span>
+                <div style={{ display: 'flex', flex: 1 }}>
+                  <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '6px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
+                  <input type="number" value={pre} min="0" step="1"
+                    style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
+                    onChange={e => handleNewPreAmt(k, e.target.value)} />
+                </div>
+                <span style={{ minWidth: 70, textAlign: 'right', fontSize: '.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  → ${fmt(finalAmt)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+    return null;
+  }
+
   // ── Render: Edit tab content ─────────────────────────────────────────────────
   function renderEditTabContent(expense) {
     const total = editTotal || expense.total;
@@ -1898,7 +2281,7 @@ export default function GastosPage() {
             <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '8px 10px', fontSize: '.8rem', color: 'var(--text-muted)' }}>$</span>
             <input type="number" placeholder="0" value={formTotal} min="1" step="1"
               style={{ borderRadius: '0 8px 8px 0', borderLeft: 'none' }}
-              onChange={e => setFormTotal(e.target.value)} />
+              onChange={e => { setFormTotal(e.target.value); handleNewTotalChange(e.target.value); }} />
           </div>
         </div>
 
@@ -2057,10 +2440,41 @@ export default function GastosPage() {
         </div>
       )}
 
-      {/* Preview */}
-      {previewShare !== null && (
-        <div style={{ marginTop: 8, fontSize: '.82rem', color: 'var(--text-muted)' }}>
-          {previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno
+      {/* Editar repartición */}
+      {previewShare !== null && !advancedCharges && (
+        <div style={{ marginTop: 8 }}>
+          <button onClick={() => setSplitPanelOpen(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: '.82rem', color: 'var(--text-muted)', fontFamily: 'inherit', width: '100%', textAlign: 'left' }}>
+            <i className={`bi ${splitPanelOpen ? 'bi-chevron-up' : 'bi-chevron-down'}`} style={{ fontSize: '.7rem', opacity: .6 }} />
+            <span>{previewPeople} persona{previewPeople > 1 ? 's' : ''} + tú = ${fmt(previewShare)} cada uno</span>
+            <span style={{ marginLeft: 'auto', color: 'var(--gold2)', fontWeight: 600 }}>Editar repartición</span>
+          </button>
+
+          {splitPanelOpen && (
+            <div style={{ marginTop: 10, background: 'rgba(201,154,20,.05)', border: '1px solid rgba(201,154,20,.12)', borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: '.7rem', fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>Distribución</div>
+              <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(255,255,255,.1)', marginBottom: 12 }}>
+                {['monto', 'porcentaje', 'propina', 'descuento'].map(tab => (
+                  <button key={tab} onClick={() => switchNewSplitTab(tab)}
+                    style={{
+                      flex: 1, padding: '6px 4px', fontSize: '.73rem', fontWeight: 600,
+                      background: newSplitTab === tab ? 'rgba(201,154,20,.2)' : 'transparent',
+                      border: 'none', borderRight: tab !== 'descuento' ? '1px solid rgba(255,255,255,.08)' : 'none',
+                      color: newSplitTab === tab ? 'var(--gold2)' : 'var(--text-muted)',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}>
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {renderNewSplitTabContent()}
+              <button onClick={() => { if (newConfirmReset) { resetNewSplitEqual(); setNewConfirmReset(false); } else { setNewConfirmReset(true); setTimeout(() => setNewConfirmReset(false), 3000); } }}
+                style={{ marginTop: 10, width: '100%', background: newConfirmReset ? 'rgba(248,113,113,.06)' : 'none', border: `1px solid ${newConfirmReset ? 'rgba(248,113,113,.15)' : 'rgba(255,255,255,.1)'}`, color: newConfirmReset ? 'rgba(248,113,113,.7)' : 'var(--text-muted)', padding: '6px', borderRadius: 8, cursor: 'pointer', fontSize: '.78rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .15s' }}>
+                <i className="bi bi-arrow-counterclockwise" />
+                {newConfirmReset ? '¿Confirmar? Se perderá la distribución actual' : 'Restablecer a partes iguales'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
