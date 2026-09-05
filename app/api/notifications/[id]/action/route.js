@@ -10,13 +10,18 @@ export async function POST(request, { params }) {
   const { action } = await request.json(); // 'accept' | 'reject'
 
   const [notif] = await sql`
-    SELECT id, type, reference_id, from_user_id, amount
+    SELECT id, type, reference_id, from_user_id, amount, charge_ids
     FROM notifications
     WHERE id = ${id} AND user_id = ${session.userId}
   `;
   if (!notif) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-  if (notif.type === 'charge_paid' && notif.reference_id) {
+  if (notif.type === 'settle_request' && notif.charge_ids?.length) {
+    if (action === 'accept') {
+      await sql`UPDATE charges SET paid = TRUE WHERE id = ANY(${notif.charge_ids}) AND paid = FALSE`;
+    }
+    // reject: los cargos quedan como estaban
+  } else if (notif.type === 'charge_paid' && notif.reference_id) {
     const chargeId = notif.reference_id;
     const [charge] = await sql`
       SELECT c.id, c.amount::float, COALESCE(c.paid_amount, 0)::float as paid_amount,

@@ -14,8 +14,10 @@ export async function GET() {
       u.display_name as from_name, u.username as from_username,
       EXISTS(
         SELECT 1 FROM notifications n
-        WHERE n.type = 'charge_paid' AND n.reference_id = c.id
-          AND n.from_user_id = ${session.userId} AND n.read = FALSE
+        WHERE n.read = FALSE AND (
+          (n.type = 'charge_paid' AND n.reference_id = c.id AND n.from_user_id = ${session.userId})
+          OR (n.type = 'settle_request' AND c.id = ANY(n.charge_ids))
+        )
       ) as pending_confirmation
     FROM charges c
     JOIN expenses e ON e.id = c.expense_id

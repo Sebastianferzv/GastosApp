@@ -53,5 +53,35 @@ export async function PUT(request, { params }) {
 
   await sql`UPDATE installment_plans SET monthly_amount = ${monthlyAmount}, total_count = ${totalCount}, my_share = ${newMyShare}, charges = ${JSON.stringify(newCharges)} WHERE id = ${id}`;
 
+  // Las cuotas ya generadas que aún no se han pagado (ni tienen una confirmación de
+  // pago pendiente) se actualizan al nuevo monto/reparto. Las ya pagadas quedan intactas.
+  const generated = await sql`
+    SELECT e.id as expense_id,
+      COALESCE(bool_or(
+        c.paid OR COALESCE(c.paid_amount, 0) > 0 OR EXISTS (
+          SELECT 1 FROM notifications n WHERE n.read = FALSE AND (
+            (n.type = 'charge_paid' AND n.reference_id = c.id)
+            OR (n.type = 'settle_request' AND c.id = ANY(n.charge_ids))
+          )
+        )
+      ), FALSE) as locked
+    FROM expenses e
+    LEFT JOIN charges c ON c.expense_id = e.id
+    WHERE e.installment_plan_id = ${id}
+    GROUP BY e.id
+  `;
+
+  for (const row of generated) {
+    if (row.locked) continue;
+    await sql`UPDATE expenses SET total = ${monthlyAmount}, my_share = ${newMyShare} WHERE id = ${row.expense_id}`;
+    await sql`DELETE FROM charges WHERE expense_id = ${row.expense_id}`;
+    for (const c of newCharges) {
+      await sql`
+        INSERT INTO charges (expense_id, person_name, person_user_id, amount)
+        VALUES (${row.expense_id}, ${c.person}, ${c.personUserId || null}, ${c.amount})
+      `;
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

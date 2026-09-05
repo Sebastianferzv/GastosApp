@@ -17,7 +17,10 @@ export async function GET() {
           'paidAmount', COALESCE(c.paid_amount, 0)::float,
           'pendingConfirmation', EXISTS(
             SELECT 1 FROM notifications n
-            WHERE n.type = 'charge_paid' AND n.reference_id = c.id AND n.read = FALSE
+            WHERE n.read = FALSE AND (
+              (n.type = 'charge_paid' AND n.reference_id = c.id)
+              OR (n.type = 'settle_request' AND c.id = ANY(n.charge_ids))
+            )
           )
         ) ORDER BY c.id
       ) FILTER (WHERE c.id IS NOT NULL), '[]') as charges

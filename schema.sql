@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   message TEXT NOT NULL,
   from_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   reference_id INTEGER,
+  charge_ids INTEGER[],
   read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -74,3 +75,4 @@ CREATE TABLE IF NOT EXISTS installment_plans (
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 -- (notifications table is new, no alter needed)
 -- ALTER TABLE expenses ADD COLUMN IF NOT EXISTS installment_plan_id INTEGER REFERENCES installment_plans(id) ON DELETE SET NULL;
+-- ALTER TABLE notifications ADD COLUMN IF NOT EXISTS charge_ids INTEGER[];

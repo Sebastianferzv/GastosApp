@@ -1134,6 +1134,7 @@ export default function GastosPage() {
 
     if (res.ok) {
       setShowEditPlan(false);
+      await fetchExpenses();
       showToast('Cuotas actualizadas.', 'success');
     } else {
       const d = await res.json().catch(() => ({}));
@@ -1416,42 +1417,44 @@ export default function GastosPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
+  // Liquidar con un contacto sin cuenta vinculada: no hay a quién pedirle confirmación,
+  // así que se marca pagado directamente (solo puede haber cargos "te debe" en este caso).
   async function handleMarkAllPaid(entry) {
-    const realOwesYou = entry.owesYou.filter(r => !r.partial);
-    const realYouOwe = entry.youOwe.filter(r => !r.partial);
-    const totalOwesYou = realOwesYou.reduce((s, r) => s + r.amount, 0);
-    const totalYouOwe = realYouOwe.reduce((s, r) => s + r.amount, 0);
-    const net = totalOwesYou - totalYouOwe;
+    if (entry.userId) return handleSettleRequest(entry);
 
+    const realOwesYou = entry.owesYou.filter(r => !r.partial);
     setCompletingResumen(prev => new Set([...prev, entry.name]));
     setTimeout(async () => {
-      // Always mark what they owe you as paid immediately
       await Promise.all(realOwesYou.map(r =>
         fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paid: true }),
         })
       ));
-
-      if (net >= 0) {
-        // They owe you more → mark your debts to them as paid directly too
-        await Promise.all(realYouOwe.map(r =>
-          fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paid: true }),
-          })
-        ));
-      } else {
-        // You owe them more → send payment request notifications
-        await Promise.all(realYouOwe.map(r =>
-          fetch(`/api/charges/${r.expenseId}/${r.chargeId}/request`, { method: 'POST' })
-        ));
-        showToast('Solicitudes enviadas. Esperando confirmación.', 'info');
-      }
-
       setCompletingResumen(prev => { const n = new Set(prev); n.delete(entry.name); return n; });
-      await Promise.all([fetchExpenses(), fetchIncoming()]);
+      await fetchExpenses();
     }, 900);
+  }
+
+  // Liquidar con una persona registrada: no se marca nada pagado de inmediato. Se envía
+  // una única solicitud que cubre ambas direcciones; todo queda tachado en el resumen
+  // hasta que la otra persona la acepta, momento en el que se marca todo pagado a la vez.
+  async function handleSettleRequest(entry) {
+    const chargeIds = [
+      ...entry.owesYou.filter(r => !r.partial).map(r => r.chargeId),
+      ...entry.youOwe.filter(r => !r.partial).map(r => r.chargeId),
+    ];
+    const res = await fetch('/api/resumen/settle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toUserId: entry.userId, chargeIds }),
+    });
+    if (res.ok) {
+      showToast(`Solicitud enviada a ${entry.name}. Quedará todo marcado cuando la acepte.`, 'info');
+      await Promise.all([fetchExpenses(), fetchIncoming()]);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast(d.error || 'Error al enviar la solicitud.', 'danger');
+    }
   }
 
   async function handlePartialPayment(entry) {
@@ -2600,7 +2603,7 @@ export default function GastosPage() {
                     {notifications.length === 0 ? (
                       <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin notificaciones</div>
                     ) : notifications.map(n => {
-                      const isPaidAction = n.type === 'charge_paid' && !n.read;
+                      const isPaidAction = (n.type === 'charge_paid' || n.type === 'settle_request') && !n.read;
                       const isUpdate = n.type === 'app_update';
                       return (
                         <div key={n.id}
@@ -2609,7 +2612,7 @@ export default function GastosPage() {
                             else if (!n.read && !isPaidAction) markNotificationsRead([n.id]);
                           }}
                           style={{ padding: '12px 16px', borderBottom: '1px solid rgba(201,154,20,.06)', background: n.read ? 'transparent' : 'rgba(201,154,20,.05)', cursor: (isUpdate || (!n.read && !isPaidAction)) ? 'pointer' : 'default', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                          <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : isUpdate ? 'bi-stars' : 'bi-cash-coin'}`} style={{ color: isUpdate ? '#a78bfa' : 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
+                          <i className={`bi ${n.type === 'friend_request' ? 'bi-person-plus-fill' : isUpdate ? 'bi-stars' : n.type === 'settle_request' ? 'bi-arrow-left-right' : 'bi-cash-coin'}`} style={{ color: isUpdate ? '#a78bfa' : 'var(--gold)', marginTop: 2, flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: '.85rem', color: n.read ? 'var(--text-muted)' : 'var(--text)', lineHeight: 1.4 }}>{n.message}</div>
                             <div style={{ fontSize: '.72rem', color: 'var(--text-muted)', marginTop: 3 }}>{relativeTime(n.createdAt)}</div>
@@ -2739,6 +2742,7 @@ export default function GastosPage() {
               const net = totalOwesYou - totalYouOwe;
               const isCompletingCard = completingResumen.has(entry.name);
               const allRows = [...entry.owesYou, ...entry.youOwe];
+              const hasPendingSettle = allRows.some(r => !r.partial && r.pendingConfirmation);
               return (
                 <div key={entry.name}
                   className={isCompletingCard ? 'completing' : ''}
@@ -2811,10 +2815,11 @@ export default function GastosPage() {
 
                   {/* Footer buttons */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,.07)' }}>
-                    <button onClick={() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); }}
-                      title="Liquidar todo"
-                      style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: 'rgba(52,211,153,.55)', cursor: 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit' }}>
-                      <i className="bi bi-check-all" />
+                    <button onClick={() => !hasPendingSettle && (() => { setMarkAllTarget({ entry, idx }); setShowMarkAllConfirm(true); })()}
+                      disabled={hasPendingSettle}
+                      title={hasPendingSettle ? `Esperando que ${entry.name} acepte` : 'Liquidar todo'}
+                      style={{ background: 'rgba(52,211,153,.05)', border: '1px solid rgba(52,211,153,.14)', color: hasPendingSettle ? 'rgba(250,204,21,.7)' : 'rgba(52,211,153,.55)', cursor: hasPendingSettle ? 'default' : 'pointer', padding: '5px 7px', borderRadius: 7, fontSize: '.9rem', lineHeight: 1, fontFamily: 'inherit', opacity: hasPendingSettle ? .8 : 1 }}>
+                      <i className={`bi ${hasPendingSettle ? 'bi-hourglass-split' : 'bi-check-all'}`} />
                     </button>
                     {entry.youOwe.some(r => !r.partial) && (
                       <button onClick={() => { setPartialTarget(entry); setPartialAmountStr(''); setShowPartialModal(true); }}
@@ -2999,7 +3004,7 @@ export default function GastosPage() {
               })()}
 
               <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 10 }}>
-                Los cambios solo aplican a las cuotas que faltan por generarse.
+                Los cambios aplican a esta y las próximas cuotas que aún no se hayan pagado. Las cuotas ya pagadas (o con un pago esperando tu confirmación) no se modifican.
               </p>
             </div>
             <div className="modal-footer">
@@ -3061,18 +3066,16 @@ export default function GastosPage() {
             <div style={{ background: '#1a1500', border: '1px solid rgba(201,154,20,.15)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 320, width: '88%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
               <i className="bi bi-check-all" style={{ fontSize: '2rem', color: '#34d399', display: 'block', marginBottom: 12 }} />
               <p style={{ margin: '0 0 .4rem', fontWeight: 600 }}>¿Liquidar todo con {entry.name}?</p>
-              {net < 0 ? (
+              {entry.userId ? (
                 <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>Te deben ${fmt(totalOwesYou)}</span> — </>}
-                  <span style={{ color: '#fca5a5' }}>les debes ${fmt(totalYouOwe)}</span><br />
-                  Neto: <strong style={{ color: '#fca5a5' }}>les debes ${fmt(Math.abs(net))}</strong>.<br />
-                  Se enviará solicitud de confirmación.
+                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>Te debe ${fmt(totalOwesYou)}</span> — </>}
+                  {totalYouOwe > 0 && <><span style={{ color: '#fca5a5' }}>le debes ${fmt(totalYouOwe)}</span></>}<br />
+                  Neto: <strong style={{ color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>{net >= 0 ? 'te debe' : 'le debes'} ${fmt(Math.abs(net))}</strong>.<br />
+                  Quedará todo marcado en el resumen hasta que {entry.name} acepte la solicitud.
                 </p>
               ) : (
                 <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                  {totalYouOwe > 0 && <><span style={{ color: '#fca5a5' }}>Les debes ${fmt(totalYouOwe)}</span> — </>}
-                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>te deben ${fmt(totalOwesYou)}</span><br /></>}
-                  Neto: <strong style={{ color: 'var(--gold2)' }}>te deben ${fmt(net)}</strong>.<br />
+                  Neto: <strong style={{ color: 'var(--gold2)' }}>te debe ${fmt(net)}</strong>.<br />
                   Todo se marcará pagado directamente.
                 </p>
               )}
