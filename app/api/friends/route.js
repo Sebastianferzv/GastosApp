@@ -37,16 +37,16 @@ export async function POST(request) {
     WHERE (requester_id=${session.userId} AND addressee_id=${target.id})
        OR (requester_id=${target.id} AND addressee_id=${session.userId})
   `;
-  if (existing.length > 0) return NextResponse.json({ error: 'Ya existe una conexión o solicitud pendiente' }, { status: 400 });
+  if (existing.length > 0) return NextResponse.json({ error: 'Ya son amigos' }, { status: 400 });
 
   const [f] = await sql`
-    INSERT INTO friendships (requester_id, addressee_id) VALUES (${session.userId}, ${target.id}) RETURNING id
+    INSERT INTO friendships (requester_id, addressee_id, status) VALUES (${session.userId}, ${target.id}, 'accepted') RETURNING id
   `;
 
   const [requester] = await sql`SELECT display_name FROM users WHERE id = ${session.userId}`;
   await sql`
     INSERT INTO notifications (user_id, type, message, from_user_id, reference_id)
-    VALUES (${target.id}, 'friend_request', ${`${requester.display_name} te envió una solicitud de amistad`}, ${session.userId}, ${f.id})
+    VALUES (${target.id}, 'friend_request', ${`${requester.display_name} te agregó como amigo`}, ${session.userId}, ${f.id})
   `;
 
   return NextResponse.json({ success: true, friendshipId: f.id, displayName: target.display_name });

@@ -1595,16 +1595,6 @@ export default function GastosPage() {
     await Promise.all([fetchGroupDetail(group.id), fetchGroupMessages(group.id)]);
   }
 
-  async function handleFriendAction(id, action) {
-    await fetch(`/api/friends/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
-    await fetchFriends();
-    showToast(action === 'accept' ? 'Solicitud aceptada.' : 'Solicitud rechazada.', action === 'accept' ? 'success' : 'info');
-  }
-
   async function removeFriend(id) {
     await fetch(`/api/friends/${id}`, { method: 'DELETE' });
     await fetchFriends();
@@ -1650,9 +1640,6 @@ export default function GastosPage() {
     : null;
 
   const resumenData = buildResumenData();
-
-  const pendingFriends = friends.filter(f => f.status === 'pending' && f.direction === 'received');
-  const sentFriends = friends.filter(f => f.status === 'pending' && f.direction === 'sent');
 
   // ── Render: New-expense split editor tab content ─────────────────────────────
   function renderNewSplitTabContent() {
@@ -3182,8 +3169,6 @@ export default function GastosPage() {
       {/* ══ MODAL: Friends / Amigos ══ */}
       {/* ══ VISTA SOCIAL: Amigos + Grupos ══ */}
       {showSocial && (() => {
-        const pendingFriendsSoc = friends.filter(f => f.status === 'pending' && f.direction === 'received');
-        const sentFriendsSoc = friends.filter(f => f.status === 'pending' && f.direction === 'sent');
         const acceptedFriendsSoc = friends.filter(f => f.status === 'accepted');
         const backBtnStyle = { background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '4px 8px', borderRadius: 7, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit' };
         const tabStyle = active => ({ flex: 1, padding: '12px 0', background: 'none', border: 'none', borderBottom: active ? '2px solid var(--gold)' : '2px solid transparent', color: active ? 'var(--gold2)' : 'var(--text-muted)', fontWeight: active ? 700 : 400, cursor: 'pointer', fontSize: '.88rem', fontFamily: 'inherit', transition: 'all .15s' });
@@ -3331,31 +3316,6 @@ export default function GastosPage() {
                           <i className="bi bi-people" />Buscar gente
                         </button>
                       </div>
-                      {pendingFriendsSoc.length > 0 && (
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Solicitudes recibidas ({pendingFriendsSoc.length})</div>
-                          {pendingFriendsSoc.map(f => (
-                            <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                              <span style={{ fontSize: '.88rem' }}><i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />{f.displayName} <span style={{ color: 'var(--text-muted)', fontSize: '.8rem' }}>@{f.username}</span></span>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button onClick={() => handleFriendAction(f.friendshipId, 'accept')} style={{ background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)', color: 'var(--paid)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Aceptar</button>
-                                <button onClick={() => handleFriendAction(f.friendshipId, 'reject')} style={{ background: 'rgba(248,113,113,.1)', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Rechazar</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {sentFriendsSoc.length > 0 && (
-                        <div style={{ marginBottom: 16 }}>
-                          <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Solicitudes enviadas</div>
-                          {sentFriendsSoc.map(f => (
-                            <div key={f.friendshipId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(201,154,20,.09)' }}>
-                              <span style={{ fontSize: '.88rem', color: 'var(--text-muted)' }}><i className="bi bi-person-fill" style={{ marginRight: 6, opacity: .4 }} />{f.displayName} <span style={{ fontSize: '.8rem' }}>@{f.username}</span><span style={{ marginLeft: 8, fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>Pendiente</span></span>
-                              <button onClick={() => removeFriend(f.friendshipId)} style={{ background: 'none', border: '1px solid rgba(248,113,113,.2)', color: 'var(--red)', padding: '4px 8px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit' }}>Cancelar</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                       <div style={{ marginBottom: 20 }}>
                         <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Amigos ({acceptedFriendsSoc.length})</div>
                         {acceptedFriendsSoc.length === 0 ? (
@@ -3804,7 +3764,6 @@ export default function GastosPage() {
                 if (filtered.length === 0) return <p style={{ padding: '16px', color: 'var(--text-muted)', fontSize: '.85rem' }}>Sin resultados.</p>;
                 return filtered.map(u => {
                   const isFriend = u.friendshipStatus === 'accepted';
-                  const isPending = u.friendshipStatus === 'pending';
                   return (
                     <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid rgba(201,154,20,.07)' }}>
                       <UserAvatar user={{ displayName: u.displayName, avatarUrl: u.avatarUrl }} size={34} />
@@ -3814,12 +3773,10 @@ export default function GastosPage() {
                       </div>
                       {isFriend ? (
                         <span style={{ fontSize: '.75rem', color: 'var(--paid)', background: 'rgba(52,211,153,.1)', border: '1px solid rgba(52,211,153,.2)', padding: '3px 8px', borderRadius: 6 }}>Amigo</span>
-                      ) : isPending ? (
-                        <span style={{ fontSize: '.75rem', color: 'var(--gold)', opacity: .7 }}>{u.direction === 'sent' ? 'Pendiente' : 'Te pidió'}</span>
                       ) : (
                         <button onClick={async () => {
                           const res = await fetch('/api/friends', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.username }) });
-                          if (res.ok) { showToast(`Solicitud enviada a ${u.displayName}.`, 'success'); fetchAllUsers(); fetchFriends(); }
+                          if (res.ok) { showToast(`${u.displayName} agregado como amigo.`, 'success'); fetchAllUsers(); fetchFriends(); }
                           else { const d = await res.json().catch(() => ({})); showToast(d.error || 'Error.', 'danger'); }
                         }} style={{ background: 'rgba(201,154,20,.1)', border: '1px solid rgba(201,154,20,.3)', color: 'var(--gold2)', padding: '4px 10px', borderRadius: 7, cursor: 'pointer', fontSize: '.8rem', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                           <i className="bi bi-person-plus" style={{ marginRight: 4 }} />Agregar
