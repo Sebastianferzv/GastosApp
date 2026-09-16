@@ -217,6 +217,7 @@ export default function GastosPage() {
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [showGastosHistory, setShowGastosHistory] = useState(false);
   const [showCobranHistory, setShowCobranHistory] = useState(false);
+  const [expandedCobranHistory, setExpandedCobranHistory] = useState(new Set());
 
   // Form (add expense)
   const [formName, setFormName] = useState('');
@@ -286,6 +287,7 @@ export default function GastosPage() {
 
   // Modals
   const [showAddMonth, setShowAddMonth] = useState(false);
+  const [showContactsInfo, setShowContactsInfo] = useState(false);
   const [addMonthVal, setAddMonthVal] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // {id, name}
@@ -2245,7 +2247,7 @@ export default function GastosPage() {
   }
 
   // ── Incoming charges, grouped by person (reused by "Me cobran" pending list and Historial) ─
-  function renderIncomingGroups(list, { allowRevert, emptyText }) {
+  function renderIncomingGroups(list, { allowRevert, emptyText, collapsible = false }) {
     if (list.length === 0) {
       return (
         <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
@@ -2268,15 +2270,36 @@ export default function GastosPage() {
       }
     });
 
-    return Object.entries(byPerson).map(([person, items]) => (
-      <div key={person} style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+    return Object.entries(byPerson).map(([person, items]) => {
+      const isOpen = !collapsible || expandedCobranHistory.has(person);
+      const total = items.filter(i => !i._partial).reduce((s, i) => s + i._amount, 0);
+      const headerContent = (
+        <>
           <span style={{ fontSize: '.78rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', whiteSpace: 'nowrap' }}>
+            {collapsible && <i className={`bi ${isOpen ? 'bi-chevron-down' : 'bi-chevron-right'}`} style={{ marginRight: 6, fontSize: '.7rem', opacity: .7 }} />}
             <i className="bi bi-person-fill" style={{ marginRight: 4 }} />{person}
+            {collapsible && <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>({items.length}) ${fmt(total)}</span>}
           </span>
           <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg,rgba(201,154,20,.35),transparent)' }} />
-        </div>
-        {items.map(item => (
+        </>
+      );
+      return (
+      <div key={person} style={{ marginBottom: 20 }}>
+        {collapsible ? (
+          <button onClick={() => setExpandedCobranHistory(prev => {
+              const next = new Set(prev);
+              next.has(person) ? next.delete(person) : next.add(person);
+              return next;
+            })}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isOpen ? 10 : 0, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+            {headerContent}
+          </button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            {headerContent}
+          </div>
+        )}
+        {isOpen && items.map(item => (
           <div key={item._key} className="card" style={{ marginBottom: 8, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, opacity: item._partial ? .6 : 1 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: '.92rem', textDecoration: 'none' }}>{item.expenseName}</div>
@@ -2319,7 +2342,8 @@ export default function GastosPage() {
           </div>
         ))}
       </div>
-    ));
+      );
+    });
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2928,7 +2952,7 @@ export default function GastosPage() {
               <button onClick={() => setShowCobranHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
             </div>
             <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
-              {renderIncomingGroups(incoming, { allowRevert: true, emptyText: 'Sin cobros recibidos' })}
+              {renderIncomingGroups(incoming, { allowRevert: true, emptyText: 'Sin cobros recibidos', collapsible: true })}
             </div>
           </div>
         </div>
@@ -3037,6 +3061,26 @@ export default function GastosPage() {
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowAddMonth(false)}>Cancelar</button>
               <button className="btn-primary" onClick={handleAddMonth}>Agregar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL: Contactos locales info ══ */}
+      {showContactsInfo && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowContactsInfo(false)}>
+          <div className="modal-box" style={{ maxWidth: 340 }}>
+            <div className="modal-header">
+              <span style={{ fontWeight: 600 }}><i className="bi bi-info-circle" style={{ marginRight: 8 }} />Contactos locales</span>
+              <button onClick={() => setShowContactsInfo(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '.88rem', color: 'var(--text)', lineHeight: 1.6, margin: 0 }}>
+                Un contacto local es una persona que <strong>no tiene cuenta en la app</strong>. Lo creas para poder registrar y gestionar tus gastos y deudas con esa persona, sin que necesite instalarla ni registrarse.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={() => setShowContactsInfo(false)} style={{ width: '100%' }}>Entendido</button>
             </div>
           </div>
         </div>
@@ -3339,9 +3383,8 @@ export default function GastosPage() {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                           <span style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)' }}>Contactos locales</span>
-                          <button type="button" tabIndex={-1}
-                            title="Un contacto local es una persona que no tiene cuenta en la app. Créalo para registrar y gestionar tus gastos y deudas con esa persona, sin que necesite instalarla ni registrarse."
-                            style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid rgba(201,154,20,.4)', background: 'rgba(201,154,20,.1)', color: 'var(--gold2)', fontSize: '.6rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', padding: 0, flexShrink: 0, fontFamily: 'inherit' }}>
+                          <button type="button" onClick={() => setShowContactsInfo(true)}
+                            style={{ width: 20, height: 20, borderRadius: '50%', border: '1px solid rgba(201,154,20,.4)', background: 'rgba(201,154,20,.1)', color: 'var(--gold2)', fontSize: '.68rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, flexShrink: 0, fontFamily: 'inherit' }}>
                             <i className="bi bi-info-lg" />
                           </button>
                         </div>
