@@ -1387,7 +1387,10 @@ export default function GastosPage() {
   function buildResumenData() {
     const byKey = {};
     const getOrCreate = (key, name, userId) => {
-      if (!byKey[key]) byKey[key] = { name, userId, owesYou: [], youOwe: [] };
+      if (!byKey[key]) {
+        const avatarUrl = userId ? friends.find(f => f.userId === userId)?.avatarUrl : null;
+        byKey[key] = { name, userId, avatarUrl, owesYou: [], youOwe: [] };
+      }
       return byKey[key];
     };
     expenses.forEach(e => {
@@ -2746,10 +2749,13 @@ export default function GastosPage() {
                   className={isCompletingCard ? 'completing' : ''}
                   style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '1rem 1.1rem', marginBottom: 12, position: 'relative' }}>
                   {/* Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                    <span style={{ fontSize: '1rem', fontWeight: 700 }}>
-                      <i className="bi bi-person-fill" style={{ opacity: .4, marginRight: 8 }} />{entry.name}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    {entry.userId ? (
+                      <UserAvatar user={{ displayName: entry.name, avatarUrl: entry.avatarUrl }} size={28} />
+                    ) : (
+                      <i className="bi bi-person-fill" style={{ opacity: .4 }} />
+                    )}
+                    <span style={{ fontSize: '1rem', fontWeight: 700 }}>{entry.name}</span>
                   </div>
 
                   {/* Te debe section */}
@@ -3292,7 +3298,7 @@ export default function GastosPage() {
                     <i className="bi bi-people" style={{ marginRight: 6 }} />Amigos
                   </button>
                   <button style={tabStyle(socialTab === 'grupos')} onClick={() => { setSocialTab('grupos'); fetchGroups(); }}>
-                    <i className="bi bi-grid-3x3-gap" style={{ marginRight: 6 }} />Grupos
+                    <i className="bi bi-grid-3x3-gap" style={{ marginRight: 6 }} />Grupos (beta)
                   </button>
                 </div>
 
@@ -3331,7 +3337,14 @@ export default function GastosPage() {
                         ))}
                       </div>
                       <div>
-                        <div style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 8 }}>Contactos locales</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                          <span style={{ fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--gold)' }}>Contactos locales</span>
+                          <button type="button" tabIndex={-1}
+                            title="Un contacto local es una persona que no tiene cuenta en la app. Créalo para registrar y gestionar tus gastos y deudas con esa persona, sin que necesite instalarla ni registrarse."
+                            style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid rgba(201,154,20,.4)', background: 'rgba(201,154,20,.1)', color: 'var(--gold2)', fontSize: '.6rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help', padding: 0, flexShrink: 0, fontFamily: 'inherit' }}>
+                            <i className="bi bi-info-lg" />
+                          </button>
+                        </div>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                           <input type="text" placeholder="Nombre del nuevo contacto..." value={newContactName}
                             onChange={e => setNewContactName(e.target.value)}
