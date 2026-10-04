@@ -1425,27 +1425,31 @@ export default function GastosPage() {
       .sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }
 
-  // Liquidar con un contacto sin cuenta vinculada: no hay a quién pedirle confirmación,
-  // así que se marca pagado directamente (solo puede haber cargos "te debe" en este caso).
+  // Si, en neto, a ti te deben más de lo que tú debes (o es un contacto sin cuenta, que
+  // solo puede tener cargos "te debe"), lo marcas todo pagado directamente: tú eres quien
+  // queda a favor, así que no hace falta pedirle confirmación a nadie por la parte menor
+  // que tú debes. Si en neto tú eres el deudor, se pide confirmación (handleSettleRequest).
   async function handleMarkAllPaid(entry) {
-    if (entry.userId) return handleSettleRequest(entry);
+    const totalOwesYou = entry.owesYou.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+    const totalYouOwe = entry.youOwe.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+    if (entry.userId && totalOwesYou - totalYouOwe < 0) return handleSettleRequest(entry);
 
-    const realOwesYou = entry.owesYou.filter(r => !r.partial);
+    const realItems = [...entry.owesYou.filter(r => !r.partial), ...entry.youOwe.filter(r => !r.partial)];
     setCompletingResumen(prev => new Set([...prev, entry.name]));
     setTimeout(async () => {
-      await Promise.all(realOwesYou.map(r =>
+      await Promise.all(realItems.map(r =>
         fetch(`/api/charges/${r.expenseId}/${r.chargeId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paid: true }),
         })
       ));
       setCompletingResumen(prev => { const n = new Set(prev); n.delete(entry.name); return n; });
-      await Promise.all([fetchExpenses(), fetchNotifications()]);
+      await Promise.all([fetchExpenses(), fetchIncoming(), fetchNotifications()]);
     }, 900);
   }
 
-  // Liquidar con una persona registrada: no se marca nada pagado de inmediato. Se envía
-  // una única solicitud que cubre ambas direcciones; todo queda tachado en el resumen
+  // Liquidar cuando en neto tú eres el deudor: no se marca nada pagado de inmediato. Se
+  // envía una única solicitud que cubre ambas direcciones; todo queda tachado en el resumen
   // hasta que la otra persona la acepta, momento en el que se marca todo pagado a la vez.
   async function handleSettleRequest(entry) {
     const chargeIds = [
@@ -3114,17 +3118,19 @@ export default function GastosPage() {
             <div style={{ background: '#1a1500', border: '1px solid rgba(201,154,20,.15)', borderRadius: 16, padding: '1.5rem 1.5rem 1.2rem', maxWidth: 320, width: '88%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,.6)' }}>
               <i className="bi bi-check-all" style={{ fontSize: '2rem', color: '#34d399', display: 'block', marginBottom: 12 }} />
               <p style={{ margin: '0 0 .4rem', fontWeight: 600 }}>¿Liquidar todo con {entry.name}?</p>
-              {entry.userId ? (
+              {entry.userId && net < 0 ? (
                 <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
                   {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>Te debe ${fmt(totalOwesYou)}</span> — </>}
                   {totalYouOwe > 0 && <><span style={{ color: '#fca5a5' }}>le debes ${fmt(totalYouOwe)}</span></>}<br />
-                  Neto: <strong style={{ color: net >= 0 ? 'var(--gold2)' : '#fca5a5' }}>{net >= 0 ? 'te debe' : 'le debes'} ${fmt(Math.abs(net))}</strong>.<br />
+                  Neto: <strong style={{ color: '#fca5a5' }}>le debes ${fmt(Math.abs(net))}</strong>.<br />
                   Quedará todo marcado en el resumen hasta que {entry.name} acepte la solicitud.
                 </p>
               ) : (
                 <p style={{ margin: '0 0 1rem', fontSize: '.83rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {totalYouOwe > 0 && <><span style={{ color: '#fca5a5' }}>Le debes ${fmt(totalYouOwe)}</span> — </>}
+                  {totalOwesYou > 0 && <><span style={{ color: 'var(--gold2)' }}>te debe ${fmt(totalOwesYou)}</span><br /></>}
                   Neto: <strong style={{ color: 'var(--gold2)' }}>te debe ${fmt(net)}</strong>.<br />
-                  Todo se marcará pagado directamente.
+                  Todo se marcará pagado directamente, sin pedir confirmación.
                 </p>
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
