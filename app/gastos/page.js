@@ -2760,6 +2760,37 @@ export default function GastosPage() {
           <div>
             {nuevoGastoForm}
 
+            {resumenData.length > 0 && (() => {
+              // Consolidado: neto por persona (lo mismo que muestra cada tarjeta), luego se suman
+              // los positivos (te deben) y los negativos (debes) por separado.
+              const sumOf = arr => arr.filter(r => !r.partial).reduce((s, r) => s + r.amount, 0);
+              let totalTeDeben = 0, totalDebes = 0;
+              resumenData.forEach(entry => {
+                const n = sumOf(entry.owesYou) - sumOf(entry.youOwe);
+                if (n > 0) totalTeDeben += n; else totalDebes += -n;
+              });
+              const balance = totalTeDeben - totalDebes;
+              const box = { flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '.8rem 1rem' };
+              const label = { fontSize: '.68rem', fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 4 };
+              return (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <div style={box}>
+                      <div style={{ ...label, color: 'var(--gold)' }}>Te deben</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--gold2)' }}>${fmt(totalTeDeben)}</div>
+                    </div>
+                    <div style={box}>
+                      <div style={{ ...label, color: '#fca5a5' }}>Debes</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fca5a5' }}>${fmt(totalDebes)}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '.8rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                    Balance: <strong style={{ color: balance >= 0 ? 'var(--gold2)' : '#fca5a5' }}>{balance >= 0 ? '+' : '-'}${fmt(Math.abs(balance))}</strong>
+                  </div>
+                </div>
+              );
+            })()}
+
             {resumenData.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>
                 <i className="bi bi-check-circle" style={{ fontSize: '3rem', opacity: .3, display: 'block' }} />
